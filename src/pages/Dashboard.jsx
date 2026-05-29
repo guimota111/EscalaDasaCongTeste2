@@ -4,8 +4,10 @@ import { db } from '../firebase'
 import { scheduleKey, formatMonthYear, MONTH_NAMES } from '../utils/dateHelpers'
 import { computeStats } from '../utils/scheduleAlgorithm'
 import MonthCalendar from '../components/MonthCalendar'
-import BalanceTable from '../components/BalanceTable'
 import { CalendarDays, TrendingUp, Edit2, Save, X } from 'lucide-react'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts'
 
 export default function Dashboard() {
   const now = new Date()
@@ -179,16 +181,52 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Balance */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <TrendingUp size={20} className="text-blue-600" />
-              Balanceamento do Mês
-            </h2>
-            <BalanceTable stats={stats || {}} pathMap={pathMap} />
-          </div>
+          {/* Balance chart */}
+          <BalanceChart stats={stats || {}} pathMap={pathMap} />
+        </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function BalanceChart({ stats, pathMap }) {
+  const normalPaths = Object.entries(pathMap)
+    .filter(([, p]) => p.regime === 'normal')
+    .sort((a, b) => a[1].name.localeCompare(b[1].name))
+
+  if (!normalPaths.length) return null
+
+  const data = normalPaths.map(([id, p]) => {
+    const s = stats[id] || {}
+    const firstName = p.name.trim().split(' ')[0]
+    return {
+      name: firstName,
+      'HAC': (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0),
+      'HOBRA': (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0),
+    }
+  })
+
+  return (
+    <div className="card">
+      <h2 className="text-lg font-semibold text-gray-800 mb-5 flex items-center gap-2">
+        <TrendingUp size={20} className="text-blue-600" />
+        Balanceamento do Mês
+      </h2>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} margin={{ top: 4, right: 16, left: -16, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+          <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+          <Tooltip
+            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+            cursor={{ fill: '#f9fafb' }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+          <Bar dataKey="HAC" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Bar dataKey="HOBRA" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }

@@ -63,11 +63,11 @@ export default function MonthCalendar({
           return (
             <div
               key={dateStr}
-              className={`rounded-lg border p-1 min-h-[72px] ${
+              className={`rounded-lg border p-1 min-h-[90px] ${
                 isWeekend ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'
               }`}
             >
-              <div className={`text-right font-semibold text-xs mb-1 ${
+              <div className={`text-right font-bold text-sm mb-1.5 ${
                 isWeekend ? 'text-blue-700' : 'text-gray-600'
               }`}>
                 {day}
