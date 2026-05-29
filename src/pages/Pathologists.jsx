@@ -1,17 +1,17 @@
 import React, { useState } from 'react'
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, Timestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useCollection } from '../hooks/useCollection'
 import {
-  REGIME_LABELS, WEEKDAY_FULL, HOSPITALS, tsToDateStr
+  REGIME_LABELS, WEEKDAY_FULL, HOSPITALS, tsToDateStr, getWeekendSlots
 } from '../utils/dateHelpers'
 import {
   UserPlus, Edit2, Trash2, PowerOff, CalendarPlus, X, Check, ChevronDown, ChevronUp
 } from 'lucide-react'
 
-const WEEKEND_SLOTS = [
+const ALL_WEEKEND_SLOTS = [
   { value: 1, label: '1º Final de Semana' },
   { value: 2, label: '2º Final de Semana' },
   { value: 3, label: '3º Final de Semana' },
@@ -19,7 +19,7 @@ const WEEKEND_SLOTS = [
 ]
 
 function emptyForm() {
-  return { name: '', regime: 'normal', weekendSlot: 1, fixedDays: [] }
+  return { name: '', regime: 'normal', weekendSlots: [1], fixedDays: [] }
 }
 
 export default function Pathologists() {
@@ -29,7 +29,6 @@ export default function Pathologists() {
   const [form, setForm] = useState(emptyForm())
   const [expandedId, setExpandedId] = useState(null)
 
-  // Modal states
   const [deactivateModal, setDeactivateModal] = useState(null)
   const [deactivateDate, setDeactivateDate] = useState('')
   const [vacationModal, setVacationModal] = useState(null)
@@ -49,10 +48,21 @@ export default function Pathologists() {
     setForm({
       name: p.name || '',
       regime: p.regime || 'normal',
-      weekendSlot: p.weekendSlot || 1,
+      weekendSlots: getWeekendSlots(p).length ? getWeekendSlots(p) : [1],
       fixedDays: p.fixedDays || [],
     })
     setShowForm(true)
+  }
+
+  function toggleWeekendSlot(val) {
+    setForm((f) => {
+      const already = f.weekendSlots.includes(val)
+      if (already) {
+        const next = f.weekendSlots.filter((s) => s !== val)
+        return { ...f, weekendSlots: next.length ? next : [val] }
+      }
+      return { ...f, weekendSlots: [...f.weekendSlots, val].sort() }
+    })
   }
 
   async function saveForm() {
@@ -62,14 +72,16 @@ export default function Pathologists() {
       const data = {
         name: form.name.trim(),
         regime: form.regime,
-        weekendSlot: form.weekendSlot,
+        weekendSlots: form.weekendSlots,
         fixedDays: form.regime === 'fixed' ? form.fixedDays : [],
         active: true,
       }
       if (editId) {
         await updateDoc(doc(db, 'pathologists', editId), data)
       } else {
-        await addDoc(collection(db, 'pathologists'), { ...data, vacations: [], deactivationDate: null })
+        await addDoc(collection(db, 'pathologists'), {
+          ...data, vacations: [], deactivationDate: null,
+        })
       }
       setShowForm(false)
     } finally {
@@ -151,109 +163,112 @@ export default function Pathologists() {
               Nenhum patologista cadastrado ainda.
             </div>
           )}
-          {pathologists.map((p) => (
-            <div key={p.id} className={`card p-0 overflow-hidden ${!p.active && 'opacity-70'}`}>
-              <div className="flex items-center px-4 py-3 gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900">{p.name}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      p.regime === 'normal' ? 'bg-blue-100 text-blue-700' :
-                      p.regime === 'weekend' ? 'bg-purple-100 text-purple-700' :
-                      'bg-orange-100 text-orange-700'
-                    }`}>
-                      {REGIME_LABELS[p.regime] || p.regime}
-                    </span>
-                    {p.weekendSlot && (
-                      <span className="text-xs text-gray-500">
-                        {WEEKEND_SLOTS.find(s => s.value === p.weekendSlot)?.label}
+          {pathologists.map((p) => {
+            const slots = getWeekendSlots(p)
+            return (
+              <div key={p.id} className={`card p-0 overflow-hidden ${!p.active && 'opacity-70'}`}>
+                <div className="flex items-center px-4 py-3 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900">{p.name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        p.regime === 'normal' ? 'bg-blue-100 text-blue-700' :
+                        p.regime === 'weekend' ? 'bg-purple-100 text-purple-700' :
+                        'bg-orange-100 text-orange-700'
+                      }`}>
+                        {REGIME_LABELS[p.regime] || p.regime}
                       </span>
-                    )}
-                    {!p.active && (
-                      <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
-                        Desligado {p.deactivationDate ? tsToDateStr(p.deactivationDate) : ''}
-                      </span>
+                      {slots.map((s) => (
+                        <span key={s} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                          {s}º FDS
+                        </span>
+                      ))}
+                      {!p.active && (
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                          Desligado {p.deactivationDate ? tsToDateStr(p.deactivationDate) : ''}
+                        </span>
+                      )}
+                    </div>
+                    {p.regime === 'fixed' && p.fixedDays?.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Dias fixos: {p.fixedDays.map(fd => `${WEEKDAY_FULL[fd.day]} (${fd.hospital})`).join(', ')}
+                      </p>
                     )}
                   </div>
-                  {p.regime === 'fixed' && p.fixedDays?.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Dias fixos: {p.fixedDays.map(fd => `${WEEKDAY_FULL[fd.day]} (${fd.hospital})`).join(', ')}
-                    </p>
-                  )}
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 rounded transition-colors"
+                      title="Editar"
+                    >
+                      <Edit2 size={15} />
+                    </button>
+                    {p.active ? (
+                      <button
+                        onClick={() => { setDeactivateModal(p.id); setDeactivateDate('') }}
+                        className="p-1.5 text-gray-400 hover:text-orange-500 rounded transition-colors"
+                        title="Desligar"
+                      >
+                        <PowerOff size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => reactivate(p.id)}
+                        className="p-1.5 text-gray-400 hover:text-green-600 rounded transition-colors"
+                        title="Reativar"
+                      >
+                        <Check size={15} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setVacationModal(p.id); setVacStart(''); setVacEnd('') }}
+                      className="p-1.5 text-gray-400 hover:text-teal-600 rounded transition-colors"
+                      title="Adicionar férias"
+                    >
+                      <CalendarPlus size={15} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(p.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                      title="Deletar"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                    <button
+                      onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                    >
+                      {expandedId === p.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 rounded transition-colors"
-                    title="Editar"
-                  >
-                    <Edit2 size={15} />
-                  </button>
-                  {p.active ? (
-                    <button
-                      onClick={() => { setDeactivateModal(p.id); setDeactivateDate('') }}
-                      className="p-1.5 text-gray-400 hover:text-orange-500 rounded transition-colors"
-                      title="Desligar"
-                    >
-                      <PowerOff size={15} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => reactivate(p.id)}
-                      className="p-1.5 text-gray-400 hover:text-green-600 rounded transition-colors"
-                      title="Reativar"
-                    >
-                      <Check size={15} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { setVacationModal(p.id); setVacStart(''); setVacEnd('') }}
-                    className="p-1.5 text-gray-400 hover:text-teal-600 rounded transition-colors"
-                    title="Adicionar férias"
-                  >
-                    <CalendarPlus size={15} />
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm(p.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
-                    title="Deletar"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                  <button
-                    onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
-                  >
-                    {expandedId === p.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                  </button>
-                </div>
+                {expandedId === p.id && (
+                  <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
+                    <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Férias / Ausências</h4>
+                    {(!p.vacations || p.vacations.length === 0) ? (
+                      <p className="text-xs text-gray-400">Nenhuma férias cadastrada.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {p.vacations.map((v, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
+                            <span>{tsToDateStr(v.start)} → {tsToDateStr(v.end)}</span>
+                            <button
+                              onClick={() => removeVacation(p.id, i)}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-
-              {expandedId === p.id && (
-                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
-                  <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Férias / Ausências</h4>
-                  {(!p.vacations || p.vacations.length === 0) ? (
-                    <p className="text-xs text-gray-400">Nenhuma férias cadastrada.</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {p.vacations.map((v, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
-                          <span>{tsToDateStr(v.start)} → {tsToDateStr(v.end)}</span>
-                          <button
-                            onClick={() => removeVacation(p.id, i)}
-                            className="text-red-400 hover:text-red-600"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -282,17 +297,29 @@ export default function Pathologists() {
                 ))}
               </select>
             </div>
+
             <div>
-              <label className="label">Final de Semana</label>
-              <select
-                className="input"
-                value={form.weekendSlot}
-                onChange={(e) => setForm((f) => ({ ...f, weekendSlot: Number(e.target.value) }))}
-              >
-                {WEEKEND_SLOTS.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
+              <label className="label">Finais de Semana (selecione um ou mais)</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {ALL_WEEKEND_SLOTS.map((s) => (
+                  <label
+                    key={s.value}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                      form.weekendSlots.includes(s.value)
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.weekendSlots.includes(s.value)}
+                      onChange={() => toggleWeekendSlot(s.value)}
+                      className="rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm">{s.label}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
 
             {form.regime === 'fixed' && (
@@ -350,11 +377,7 @@ export default function Pathologists() {
             </div>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setDeactivateModal(null)}>Cancelar</button>
-              <button
-                className="btn-danger"
-                onClick={confirmDeactivate}
-                disabled={!deactivateDate}
-              >
+              <button className="btn-danger" onClick={confirmDeactivate} disabled={!deactivateDate}>
                 Desligar
               </button>
             </div>

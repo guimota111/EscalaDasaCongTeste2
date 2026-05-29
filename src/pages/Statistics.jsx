@@ -9,7 +9,7 @@ import { BarChart2 } from 'lucide-react'
 
 export default function Statistics() {
   const [pathologists, setPathologists] = useState([])
-  const [allStats, setAllStats] = useState({}) // { [pathId]: { HAC: {weekday, holiday}, HOBRA: {weekday, holiday} } }
+  const [allStats, setAllStats] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -24,16 +24,23 @@ export default function Statistics() {
         const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
         setPathologists(paths)
 
-        // Aggregate all statistics
+        // Aggregate all statistics docs
         const agg = {}
         for (const sd of statsSnap.docs) {
           const shifts = sd.data().shifts || {}
           for (const [pathId, data] of Object.entries(shifts)) {
-            if (!agg[pathId]) agg[pathId] = { HAC: { weekday: 0, holiday: 0 }, HOBRA: { weekday: 0, holiday: 0 } }
+            if (!agg[pathId]) {
+              agg[pathId] = {
+                HAC: { weekday: 0, holiday: 0 },
+                HOBRA: { weekday: 0, holiday: 0 },
+                fifthWeekend: 0,
+              }
+            }
             for (const h of HOSPITALS) {
               agg[pathId][h].weekday += data[h]?.weekday || 0
               agg[pathId][h].holiday += data[h]?.holiday || 0
             }
+            agg[pathId].fifthWeekend += data.fifthWeekend || 0
           }
         }
         setAllStats(agg)
@@ -44,10 +51,10 @@ export default function Statistics() {
     load()
   }, [])
 
-  const normalPaths = pathologists.filter((p) => p.regime === 'normal')
+  const normalPaths = pathologists
+    .filter((p) => p.regime === 'normal')
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  // Build chart data
   const chartData = normalPaths.map((p) => {
     const s = allStats[p.id] || {}
     return {
@@ -83,14 +90,15 @@ export default function Statistics() {
           <p className="text-gray-400 text-sm">Nenhum patologista de regime Normal cadastrado.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm mb-6">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-2 pr-4 font-semibold text-gray-700">Patologista</th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HAC Seg-Qui</th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HAC Feriados</th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HOBRA Seg-Qui</th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HOBRA Feriados</th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HAC<br/><span className="font-normal text-xs text-gray-500">Seg-Qui</span></th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HAC<br/><span className="font-normal text-xs text-gray-500">Feriados</span></th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HOBRA<br/><span className="font-normal text-xs text-gray-500">Seg-Qui</span></th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HOBRA<br/><span className="font-normal text-xs text-gray-500">Feriados</span></th>
+                  <th className="text-center py-2 px-2 font-semibold text-amber-700">5º FDS</th>
                   <th className="text-center py-2 px-2 font-semibold text-blue-700">Total</th>
                 </tr>
               </thead>
@@ -101,17 +109,19 @@ export default function Statistics() {
                   const hacHol = s.HAC?.holiday || 0
                   const hobraWd = s.HOBRA?.weekday || 0
                   const hobraHol = s.HOBRA?.holiday || 0
+                  const fifth = s.fifthWeekend || 0
                   const total = hacWd + hacHol + hobraWd + hobraHol
                   return (
                     <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2 pr-4 text-gray-800">
                         {p.name}
-                        {!p.active && <span className="ml-2 text-xs text-red-500">(desligado)</span>}
+                        {!p.active && <span className="ml-2 text-xs text-red-400">(desligado)</span>}
                       </td>
                       <td className="text-center py-2 px-2 text-gray-700">{hacWd}</td>
                       <td className="text-center py-2 px-2 text-gray-700">{hacHol}</td>
                       <td className="text-center py-2 px-2 text-gray-700">{hobraWd}</td>
                       <td className="text-center py-2 px-2 text-gray-700">{hobraHol}</td>
+                      <td className="text-center py-2 px-2 text-amber-600 font-medium">{fifth || '—'}</td>
                       <td className="text-center py-2 px-2 font-bold text-blue-700">{total}</td>
                     </tr>
                   )
