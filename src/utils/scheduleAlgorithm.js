@@ -160,14 +160,63 @@ export function generateSchedule(
   }
 
   // --------------------------------------------------------------------------
-  // STEP 3: Weekdays Mon-Thu — Normal regime only, balanced HAC/HOBRA
+  // STEP 3: Weekdays Mon-Thu — Normal regime, score-based fair distribution
+  //
+  // Goals (in priority order):
+  //   1. Every available pathologist gets at least 1 shift
+  //   2. Total shifts (HAC+HOBRA) as equal as possible across pathologists
+  //   3. HAC and HOBRA counts balanced per pathologist
+  //   4. Avoid consecutive days
   // --------------------------------------------------------------------------
   const normalPaths = active.filter((p) => p.regime === 'normal')
+  const weekdayDates = days.filter((d) => d.isWeekday)
+
+  // Per-month shift counters (separate from historical, for within-month balance)
+  const monthCount = {} // { pathId: { HAC: n, HOBRA: n } }
+  for (const p of normalPaths) monthCount[p.id] = { HAC: 0, HOBRA: 0 }
+
+  function monthTotal(pathId) {
+    return (monthCount[pathId]?.HAC || 0) + (monthCount[pathId]?.HOBRA || 0)
+  }
+
+  // Count how many weekdays each pathologist is available this month
+  const availableDays = {}
+  for (const p of normalPaths) {
+    availableDays[p.id] = weekdayDates.filter((d) => isAvailable(p, d.dateStr)).length
+  }
+
+  // Target shifts per pathologist this month, proportional to availability.
+  // Total slots = weekdayDates.length * 2 (one HAC + one HOBRA per day).
+  const totalSlots = weekdayDates.length * 2
+  const totalAvailDays = normalPaths.reduce((s, p) => s + availableDays[p.id], 0)
+
+  function targetTotal(pathId) {
+    if (!totalAvailDays) return 0
+    return (totalSlots * availableDays[pathId]) / totalAvailDays
+  }
+
+  function targetPerHospital(pathId) {
+    return targetTotal(pathId) / 2
+  }
+
+  // Score: higher = more urgently needs a shift at this hospital.
+  // Uses monthly counts as primary signal; consecutive-day penalty.
+  function score(p, hospital, dateStr) {
+    const totalNeed = targetTotal(p.id) - monthTotal(p.id)        // main fairness
+    const hospNeed = targetPerHospital(p.id) - (monthCount[p.id]?.[hospital] || 0) // HAC/HOBRA balance
+    const histPenalty = totalShifts(p.id) * 0.1                   // slight penalty for historical surplus
+    const consecPenalty = wasAssignedYesterday(p.id, dateStr) ? 15 : 0 // avoid back-to-back
+    return totalNeed * 10 + hospNeed * 5 - histPenalty - consecPenalty
+  }
+
+  function assignWeekday(dateStr, hospital, pathId) {
+    assign(dateStr, hospital, pathId)
+    monthCount[pathId][hospital]++
+  }
 
   for (const { dateStr, isWeekday } of days) {
     if (!isWeekday) continue
 
-    // Track who already has a slot today (can't be at two hospitals)
     const todayAssigned = new Set(
       HOSPITALS.map((h) => result[dateStr][h]).filter(Boolean)
     )
@@ -175,26 +224,52 @@ export function generateSchedule(
     for (const hospital of HOSPITALS) {
       if (result[dateStr][hospital]) continue
 
-      // Pool: available AND not already at the other hospital today
-      const available = normalPaths.filter(
+      const pool = normalPaths.filter(
         (p) => isAvailable(p, dateStr) && !todayAssigned.has(p.id)
       )
-      if (!available.length) continue
+      if (!pool.length) continue
 
-      // Prefer not-yesterday; fall back to all available if everyone was yesterday
-      const notYesterday = available.filter((p) => !wasAssignedYesterday(p.id, dateStr))
-      const pool = notYesterday.length > 0 ? notYesterday : available
-
-      // Sort: 1) fewest shifts at THIS hospital, 2) fewest total shifts
-      pool.sort((a, b) => {
-        const hDiff = (shiftCount[a.id]?.[hospital] || 0) - (shiftCount[b.id]?.[hospital] || 0)
-        if (hDiff !== 0) return hDiff
-        return totalShifts(a.id) - totalShifts(b.id)
-      })
+      // Pick highest-score candidate (soft constraint on consecutive days via penalty)
+      pool.sort((a, b) => score(b, hospital, dateStr) - score(a, hospital, dateStr))
 
       const chosen = pool[0]
-      assign(dateStr, hospital, chosen.id)
+      assignWeekday(dateStr, hospital, chosen.id)
       todayAssigned.add(chosen.id)
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // STEP 4: Guarantee no zeros — if an available pathologist has 0 shifts,
+  // swap them in on a day where the most-loaded pathologist has ≥ 2 shifts.
+  // --------------------------------------------------------------------------
+  for (const p of normalPaths) {
+    if (monthTotal(p.id) > 0) continue
+    // Find days this pathologist is available
+    const candidateDays = weekdayDates.filter((d) => isAvailable(p, d.dateStr))
+    if (!candidateDays.length) continue
+
+    for (const hospital of HOSPITALS) {
+      // Find a day where someone else has many shifts and p is free
+      let bestDay = null
+      let bestScore = -Infinity
+      for (const { dateStr } of candidateDays) {
+        const current = result[dateStr][hospital]
+        if (!current || current === p.id) continue
+        const currentLoad = monthTotal(current)
+        if (currentLoad > 1 && currentLoad > bestScore) {
+          bestScore = currentLoad
+          bestDay = { dateStr, displaced: current }
+        }
+      }
+      if (bestDay) {
+        // Swap: remove displaced from this slot, put p in
+        monthCount[bestDay.displaced][hospital]--
+        result[bestDay.dateStr][hospital] = p.id
+        shiftCount[p.id] = shiftCount[p.id] || { HAC: 0, HOBRA: 0 }
+        shiftCount[p.id][hospital]++
+        monthCount[p.id][hospital]++
+        break
+      }
     }
   }
 
