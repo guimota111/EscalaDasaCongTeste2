@@ -184,7 +184,6 @@ export default function Dashboard() {
           {/* Balance chart */}
           <BalanceChart stats={stats || {}} pathMap={pathMap} />
         </div>
-        </div>
       )}
     </div>
   )
