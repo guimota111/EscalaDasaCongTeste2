@@ -1,6 +1,7 @@
 import {
   buildMonthDays,
   getMonthWeekendGroups,
+  getWeekendSlotOfDate,
   isOnVacation,
   getWeekendSlots,
   HOSPITALS,
@@ -202,8 +203,10 @@ export function generateSchedule(
 
 /**
  * Compute statistics from a published schedule.
+ * 5th weekend is derived directly from the schedule days (not from weekendAssignments)
+ * so manual edits to those cells are always reflected correctly.
  */
-export function computeStats(scheduleDays, pathologists, holidays, weekendAssignments = {}) {
+export function computeStats(scheduleDays, pathologists, holidays) {
   const holidaySet = new Set(
     holidays.map((h) => (typeof h.date === 'string' ? h.date : ''))
   )
@@ -220,30 +223,41 @@ export function computeStats(scheduleDays, pathologists, holidays, weekendAssign
     }
   }
 
+  // Find which dates belong to the 5th weekend of their month
+  const fifthWeekendDates = new Set()
+  for (const dateStr of Object.keys(scheduleDays)) {
+    const date = new Date(dateStr + 'T12:00:00')
+    const slot = getWeekendSlotOfDate(date)
+    if (slot === 5) fifthWeekendDates.add(dateStr)
+  }
+
+  // Track which pathologists already counted for 5th weekend (count once per weekend, not per day)
+  const fifthWeekendCounted = new Set() // `${pathId}-${hospital}`
+
   for (const [dateStr, day] of Object.entries(scheduleDays)) {
     const isHoliday = holidaySet.has(dateStr)
     const dow = new Date(dateStr + 'T12:00:00').getDay()
     const isWeekday = dow >= 1 && dow <= 4
+    const isFifthWeekend = fifthWeekendDates.has(dateStr)
 
     for (const hospital of HOSPITALS) {
       const pathId = day[hospital]
       if (!pathId) continue
       ensure(pathId)
+
       if (isHoliday) {
         stats[pathId][hospital].holiday++
       } else if (isWeekday) {
         stats[pathId][hospital].weekday++
       }
-    }
-  }
 
-  // 5th weekend tracking
-  const fifth = weekendAssignments?.[5]
-  if (fifth) {
-    for (const hospital of HOSPITALS) {
-      if (fifth[hospital]) {
-        ensure(fifth[hospital])
-        stats[fifth[hospital]].fifthWeekend++
+      // Count 5th weekend once per pathologist per hospital (not once per day)
+      if (isFifthWeekend) {
+        const key = `${pathId}-${hospital}`
+        if (!fifthWeekendCounted.has(key)) {
+          stats[pathId].fifthWeekend++
+          fifthWeekendCounted.add(key)
+        }
       }
     }
   }

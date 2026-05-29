@@ -29,12 +29,7 @@ async function recomputeStatsForMonth(dateStr) {
   const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
   const holidays = holSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
-  const newStats = computeStats(
-    schedData.days || {},
-    paths,
-    holidays,
-    schedData.weekendAssignments || {}
-  )
+  const newStats = computeStats(schedData.days || {}, paths, holidays)
 
   await setDoc(doc(db, 'statistics', key), {
     year: schedData.year,

@@ -71,7 +71,7 @@ export default function Dashboard() {
       const key = scheduleKey(year, month)
       const pathsSnap = await getDocs(collection(db, 'pathologists'))
       const paths = pathsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      const newStats = computeStats(editedDays, paths, holidays, schedule.weekendAssignments)
+      const newStats = computeStats(editedDays, paths, holidays)
 
       await setDoc(doc(db, 'schedules', key), {
         ...schedule,

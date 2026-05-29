@@ -79,7 +79,7 @@ export default function GenerateSchedule() {
 
   useEffect(() => {
     if (!schedule) return
-    const stats = computeStats(schedule, pathologists, holidays, weekendAssignments)
+    const stats = computeStats(schedule, pathologists, holidays)
     setLiveStats(stats)
   }, [schedule, pathologists, holidays, weekendAssignments])
 
@@ -109,7 +109,7 @@ export default function GenerateSchedule() {
     setPublishing(true)
     try {
       const key = scheduleKey(year, month)
-      const stats = computeStats(schedule, pathologists, holidays, weekendAssignments)
+      const stats = computeStats(schedule, pathologists, holidays)
 
       await setDoc(doc(db, 'schedules', key), {
         year,
