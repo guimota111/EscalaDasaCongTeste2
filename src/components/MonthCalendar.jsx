@@ -1,54 +1,68 @@
-import React from 'react'
-import { buildMonthDays, WEEKDAY_NAMES, formatMonthYear } from '../utils/dateHelpers'
+import React, { useState } from 'react'
+import { buildMonthDays, WEEKDAY_NAMES } from '../utils/dateHelpers'
+import { X } from 'lucide-react'
+
+const COLORS = [
+  'bg-blue-100 text-blue-800',
+  'bg-green-100 text-green-800',
+  'bg-purple-100 text-purple-800',
+  'bg-orange-100 text-orange-800',
+  'bg-pink-100 text-pink-800',
+  'bg-teal-100 text-teal-800',
+  'bg-yellow-100 text-yellow-800',
+  'bg-red-100 text-red-800',
+  'bg-indigo-100 text-indigo-800',
+  'bg-cyan-100 text-cyan-800',
+]
+
+function buildColorMap(pathMap) {
+  const map = {}
+  let i = 0
+  for (const id of Object.keys(pathMap)) {
+    map[id] = COLORS[i % COLORS.length]
+    i++
+  }
+  return map
+}
 
 /**
- * Read-only calendar grid showing HAC/HOBRA assignments per day.
- * pathMap: { [pathId]: { name, color } }
+ * Read-only (or editable) calendar grid.
+ * pathMap: { [pathId]: { name, ... } }
  * scheduleDays: { [dateStr]: { HAC: pathId|null, HOBRA: pathId|null } }
+ * onEdit(dateStr, hospital, newPathId): optional callback for edit mode
  */
-export default function MonthCalendar({ year, month, scheduleDays = {}, pathMap = {}, compact = false }) {
+export default function MonthCalendar({
+  year, month, scheduleDays = {}, pathMap = {}, onEdit,
+}) {
   const days = buildMonthDays(year, month)
-  const firstDow = days[0].dow // 0=Sun
+  const firstDow = days[0].dow
+  const colorMap = buildColorMap(pathMap)
+  const editable = !!onEdit
 
-  // Color palette for pathologists
-  const COLORS = [
-    'bg-blue-100 text-blue-800',
-    'bg-green-100 text-green-800',
-    'bg-purple-100 text-purple-800',
-    'bg-orange-100 text-orange-800',
-    'bg-pink-100 text-pink-800',
-    'bg-teal-100 text-teal-800',
-    'bg-yellow-100 text-yellow-800',
-    'bg-red-100 text-red-800',
-    'bg-indigo-100 text-indigo-800',
-    'bg-cyan-100 text-cyan-800',
-  ]
-
-  const pathColorMap = {}
-  let colorIdx = 0
-  for (const id of Object.keys(pathMap)) {
-    pathColorMap[id] = COLORS[colorIdx % COLORS.length]
-    colorIdx++
-  }
-
-  function getName(pathId) {
-    if (!pathId) return null
-    const p = pathMap[pathId]
-    return p ? p.name : '?'
-  }
+  // Edit popover state
+  const [editing, setEditing] = useState(null) // { dateStr, hospital }
 
   function getShortName(pathId) {
-    const name = getName(pathId)
-    if (!name) return null
+    if (!pathId) return null
+    const name = pathMap[pathId]?.name
+    if (!name) return '?'
     const parts = name.trim().split(' ')
     return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0]
   }
 
-  const emptyCells = firstDow // cells before day 1
+  function handlePickPath(pathId) {
+    if (!editing) return
+    onEdit(editing.dateStr, editing.hospital, pathId || null)
+    setEditing(null)
+  }
+
+  const sortedPaths = Object.entries(pathMap).sort((a, b) =>
+    a[1].name.localeCompare(b[1].name)
+  )
 
   return (
-    <div>
-      {/* Day of week headers */}
+    <div className="relative">
+      {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-1">
         {WEEKDAY_NAMES.map((d) => (
           <div key={d} className="text-center text-xs font-semibold text-gray-500 py-1">
@@ -58,47 +72,115 @@ export default function MonthCalendar({ year, month, scheduleDays = {}, pathMap 
       </div>
 
       <div className="grid grid-cols-7 gap-1">
-        {/* Empty leading cells */}
-        {Array.from({ length: emptyCells }).map((_, i) => (
+        {Array.from({ length: firstDow }).map((_, i) => (
           <div key={`empty-${i}`} />
         ))}
 
-        {days.map(({ dateStr, day, dow, isWeekend }) => {
+        {days.map(({ dateStr, day, isWeekend }) => {
           const slot = scheduleDays[dateStr] || {}
-          const hacId = slot.HAC
-          const hobraId = slot.HOBRA
 
           return (
             <div
               key={dateStr}
-              className={`rounded-lg border ${isWeekend ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'} ${compact ? 'p-1 min-h-[52px]' : 'p-1.5 min-h-[70px]'}`}
+              className={`rounded-lg border p-1 min-h-[72px] ${
+                isWeekend ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'
+              }`}
             >
-              <div className={`text-right font-semibold mb-1 ${isWeekend ? 'text-blue-700' : 'text-gray-700'} ${compact ? 'text-xs' : 'text-sm'}`}>
+              <div className={`text-right font-semibold text-xs mb-1 ${
+                isWeekend ? 'text-blue-700' : 'text-gray-600'
+              }`}>
                 {day}
               </div>
-              <div className="space-y-0.5">
-                {hacId && (
-                  <div className={`rounded px-1 py-0.5 text-xs truncate ${pathColorMap[hacId] || 'bg-gray-100 text-gray-700'}`}>
-                    <span className="font-semibold">H</span> {getShortName(hacId)}
+
+              {(['HAC', 'HOBRA']).map((hospital) => {
+                const pathId = slot[hospital]
+                const isEditingThis =
+                  editing?.dateStr === dateStr && editing?.hospital === hospital
+
+                return (
+                  <div key={hospital} className="mb-0.5">
+                    {editable ? (
+                      <button
+                        onClick={() =>
+                          setEditing(isEditingThis ? null : { dateStr, hospital })
+                        }
+                        className={`w-full text-left rounded px-1 py-0.5 text-xs truncate transition-colors ${
+                          isEditingThis
+                            ? 'ring-2 ring-blue-400 ' + (pathId ? colorMap[pathId] : 'bg-gray-100 text-gray-500')
+                            : pathId
+                            ? colorMap[pathId] + ' hover:opacity-80'
+                            : 'bg-gray-50 text-gray-400 border border-dashed border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="font-semibold text-[10px] opacity-60">{hospital} </span>
+                        {pathId ? getShortName(pathId) : '—'}
+                      </button>
+                    ) : (
+                      <div
+                        className={`rounded px-1 py-0.5 text-xs truncate ${
+                          pathId ? colorMap[pathId] : 'text-gray-300'
+                        }`}
+                      >
+                        {pathId ? (
+                          <>
+                            <span className="font-semibold">{hospital} </span>
+                            {getShortName(pathId)}
+                          </>
+                        ) : (
+                          <span className="font-semibold text-[10px] opacity-40">{hospital}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-                {hobraId && (
-                  <div className={`rounded px-1 py-0.5 text-xs truncate ${pathColorMap[hobraId] || 'bg-gray-100 text-gray-700'}`}>
-                    <span className="font-semibold">B</span> {getShortName(hobraId)}
-                  </div>
-                )}
-              </div>
+                )
+              })}
             </div>
           )
         })}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        <span className="text-xs text-gray-500 font-medium">Legenda:</span>
-        <span className="text-xs text-gray-500"><span className="font-semibold">H</span> = HAC</span>
-        <span className="text-xs text-gray-500"><span className="font-semibold">B</span> = HOBRA</span>
-        {Object.entries(pathMap).map(([id, p]) => (
-          <span key={id} className={`text-xs px-2 py-0.5 rounded ${pathColorMap[id]}`}>
+      {/* Edit dropdown (portal-like overlay) */}
+      {editing && (
+        <div className="fixed inset-0 z-40" onClick={() => setEditing(null)}>
+          <div
+            className="absolute z-50 bg-white rounded-xl shadow-xl border border-gray-200 py-2 w-52"
+            style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-3 pb-1.5 border-b border-gray-100">
+              <span className="text-xs font-semibold text-gray-700">
+                {editing.hospital} — dia {editing.dateStr.slice(8)}
+              </span>
+              <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="max-h-64 overflow-y-auto py-1">
+              <button
+                onClick={() => handlePickPath(null)}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+              >
+                — Nenhum —
+              </button>
+              {sortedPaths.map(([id, p]) => (
+                <button
+                  key={id}
+                  onClick={() => handlePickPath(id)}
+                  className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-800"
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="mt-3 flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-gray-400 font-medium">Legenda:</span>
+        {sortedPaths.map(([id, p]) => (
+          <span key={id} className={`text-xs px-2 py-0.5 rounded ${colorMap[id]}`}>
             {p.name}
           </span>
         ))}
