@@ -1,42 +1,102 @@
 import React, { useState } from 'react'
-import { collection, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
+import {
+  collection, addDoc, deleteDoc, doc, getDoc, getDocs, setDoc, Timestamp
+} from 'firebase/firestore'
 import { db } from '../firebase'
 import { useCollection } from '../hooks/useCollection'
+import { scheduleKey } from '../utils/dateHelpers'
+import { computeStats } from '../utils/scheduleAlgorithm'
 import { format } from 'date-fns'
-import { CalendarDays, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, Plus, Trash2, RefreshCw } from 'lucide-react'
+
+/**
+ * After any holiday change, recompute statistics for the affected month
+ * so feriado shifts are correctly categorised.
+ */
+async function recomputeStatsForMonth(dateStr) {
+  const [yearStr, monthStr] = dateStr.split('-')
+  const key = scheduleKey(Number(yearStr), Number(monthStr))
+
+  const [schedSnap, pathSnap, holSnap] = await Promise.all([
+    getDoc(doc(db, 'schedules', key)),
+    getDocs(collection(db, 'pathologists')),
+    getDocs(collection(db, 'holidays')),
+  ])
+
+  if (!schedSnap.exists()) return // no published schedule for this month, nothing to do
+
+  const schedData = schedSnap.data()
+  const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const holidays = holSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+  const newStats = computeStats(
+    schedData.days || {},
+    paths,
+    holidays,
+    schedData.weekendAssignments || {}
+  )
+
+  await setDoc(doc(db, 'statistics', key), {
+    year: schedData.year,
+    month: schedData.month,
+    shifts: newStats,
+  })
+}
 
 export default function Holidays() {
   const { data: holidays, loading } = useCollection('holidays', 'date')
   const [date, setDate] = useState('')
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [recomputing, setRecomputing] = useState(false)
+  const [lastMsg, setLastMsg] = useState('')
 
   async function handleAdd(e) {
     e.preventDefault()
     if (!date || !name.trim()) return
     setSaving(true)
+    setLastMsg('')
     try {
       await addDoc(collection(db, 'holidays'), {
-        date: date, // store as 'yyyy-MM-dd' string for easy lookup
+        date,
         name: name.trim(),
         createdAt: Timestamp.now(),
       })
       setDate('')
       setName('')
+
+      // Recompute stats for the month of this holiday
+      setRecomputing(true)
+      await recomputeStatsForMonth(date)
+      setLastMsg(`Estatísticas de ${format(new Date(date + 'T12:00:00'), 'MM/yyyy')} atualizadas.`)
     } finally {
       setSaving(false)
+      setRecomputing(false)
     }
   }
 
-  async function handleDelete(id) {
-    await deleteDoc(doc(db, 'holidays', id))
+  async function handleDelete(holidayId, holidayDate) {
+    await deleteDoc(doc(db, 'holidays', holidayId))
+
+    if (holidayDate) {
+      setRecomputing(true)
+      setLastMsg('')
+      try {
+        await recomputeStatsForMonth(holidayDate)
+        setLastMsg(`Estatísticas de ${format(new Date(holidayDate + 'T12:00:00'), 'MM/yyyy')} atualizadas.`)
+      } finally {
+        setRecomputing(false)
+      }
+    }
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Feriados</h1>
-        <p className="text-gray-500 text-sm">Cadastro manual de feriados</p>
+        <p className="text-gray-500 text-sm">
+          Cadastro manual de feriados — as estatísticas são recalculadas automaticamente ao salvar ou remover.
+        </p>
       </div>
 
       <div className="card">
@@ -65,11 +125,21 @@ export default function Holidays() {
               required
             />
           </div>
-          <button type="submit" className="btn-primary" disabled={saving}>
+          <button type="submit" className="btn-primary" disabled={saving || recomputing}>
             <Plus size={16} />
-            {saving ? 'Adicionando...' : 'Adicionar'}
+            {saving ? 'Salvando...' : recomputing ? 'Atualizando...' : 'Adicionar'}
           </button>
         </form>
+
+        {recomputing && (
+          <p className="mt-3 text-xs text-blue-600 flex items-center gap-1.5">
+            <RefreshCw size={13} className="animate-spin" />
+            Recalculando estatísticas...
+          </p>
+        )}
+        {lastMsg && !recomputing && (
+          <p className="mt-3 text-xs text-green-600">{lastMsg}</p>
+        )}
       </div>
 
       <div className="card">
@@ -102,8 +172,9 @@ export default function Holidays() {
                     <td className="py-2 text-gray-800">{h.name}</td>
                     <td className="py-2 text-right">
                       <button
-                        onClick={() => handleDelete(h.id)}
+                        onClick={() => handleDelete(h.id, h.date)}
                         className="text-gray-400 hover:text-red-600 transition-colors"
+                        disabled={recomputing}
                       >
                         <Trash2 size={15} />
                       </button>
