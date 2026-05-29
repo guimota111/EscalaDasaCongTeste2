@@ -7,7 +7,12 @@ import React from 'react'
  */
 export default function BalanceBars({ stats = {}, pathMap = {} }) {
   const paths = Object.entries(pathMap)
-    .filter(([, p]) => p.regime === 'normal')
+    .filter(([id, p]) => {
+      if (p.regime !== 'normal') return false
+      const s = stats[id] || {}
+      const total = (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0) + (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0)
+      return total > 0
+    })
     .sort((a, b) => a[1].name.localeCompare(b[1].name))
 
   if (!paths.length) {
