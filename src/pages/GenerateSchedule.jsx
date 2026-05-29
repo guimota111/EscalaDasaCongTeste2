@@ -5,7 +5,7 @@ import {
 import { db } from '../firebase'
 import {
   scheduleKey, buildMonthDays, MONTH_NAMES, HOSPITALS, WEEKDAY_NAMES,
-  formatMonthYear, hasFifthWeekend
+  formatMonthYear, hasFifthWeekend, getMonthWeekendGroups
 } from '../utils/dateHelpers'
 import { generateSchedule, computeStats } from '../utils/scheduleAlgorithm'
 import BalanceBars from '../components/BalanceBars'
@@ -102,6 +102,25 @@ export default function GenerateSchedule() {
       ...prev,
       [dateStr]: { ...prev[dateStr], [hospital]: pathId || null },
     }))
+  }
+
+  // When a weekend slot dropdown changes, fill all 3 days of that slot automatically
+  function handleWeekendAssignmentChange(slot, hospital, pathId) {
+    const weekendGroups = getMonthWeekendGroups(year, month)
+    const slotDays = weekendGroups[slot] || []
+
+    setWeekendAssignments((prev) => ({
+      ...prev,
+      [slot]: { ...(prev[slot] || {}), [hospital]: pathId || null },
+    }))
+
+    setSchedule((prev) => {
+      const next = { ...prev }
+      for (const { dateStr } of slotDays) {
+        next[dateStr] = { ...(next[dateStr] || {}), [hospital]: pathId || null }
+      }
+      return next
+    })
   }
 
   async function handlePublish() {
@@ -237,24 +256,53 @@ export default function GenerateSchedule() {
             </table>
           </div>
 
-          {/* Live balance bars */}
-          <div className="card">
-            <h2 className="font-semibold text-gray-800 mb-4">Balanceamento ao Vivo</h2>
-            <BalanceBars stats={liveStats} pathMap={pathMap} />
+          {/* Live balance + weekend controls */}
+          <div className="space-y-4">
+            <div className="card">
+              <h2 className="font-semibold text-gray-800 mb-4">Balanceamento ao Vivo</h2>
+              <BalanceBars stats={liveStats} pathMap={pathMap} />
+            </div>
 
-            {/* Weekend rotation summary */}
             {Object.keys(weekendAssignments).length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">Finais de Semana</h3>
-                <div className="space-y-1.5">
-                  {Object.entries(weekendAssignments).sort(([a], [b]) => Number(a) - Number(b)).map(([slot, wa]) => (
-                    <div key={slot} className="text-xs">
-                      <span className="font-medium text-gray-600">{slot}º FDS: </span>
-                      <span className="text-blue-700">HAC: {wa.HAC ? (pathMap[wa.HAC]?.name || wa.HAC).split(' ')[0] : '—'}</span>
-                      <span className="text-gray-400 mx-1">·</span>
-                      <span className="text-emerald-700">HOBRA: {wa.HOBRA ? (pathMap[wa.HOBRA]?.name || wa.HOBRA).split(' ')[0] : '—'}</span>
-                    </div>
-                  ))}
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 mb-3">Finais de Semana</h2>
+                <p className="text-xs text-gray-500 mb-4">
+                  Selecione o plantonista de cada hospital. Os 3 dias (Sex/Sáb/Dom) são preenchidos automaticamente.
+                </p>
+                <div className="space-y-4">
+                  {Object.entries(weekendAssignments)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([slotStr, wa]) => {
+                      const slot = Number(slotStr)
+                      return (
+                        <div key={slot}>
+                          <p className="text-xs font-semibold text-gray-600 mb-1.5">{slot}º Final de Semana</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {HOSPITALS.map((hospital) => (
+                              <div key={hospital}>
+                                <label className="text-[11px] font-medium text-gray-500 mb-0.5 block">
+                                  <span className={hospital === 'HAC' ? 'text-blue-600' : 'text-emerald-600'}>
+                                    {hospital}
+                                  </span>
+                                </label>
+                                <select
+                                  className="text-xs border border-gray-200 rounded px-2 py-1 bg-white w-full"
+                                  value={wa[hospital] || ''}
+                                  onChange={(e) =>
+                                    handleWeekendAssignmentChange(slot, hospital, e.target.value)
+                                  }
+                                >
+                                  <option value="">— vazio —</option>
+                                  {activePaths.map((p) => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
                 </div>
               </div>
             )}
