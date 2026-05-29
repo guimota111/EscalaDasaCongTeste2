@@ -2,27 +2,9 @@ import React, { useState } from 'react'
 import { buildMonthDays, WEEKDAY_NAMES } from '../utils/dateHelpers'
 import { X } from 'lucide-react'
 
-const COLORS = [
-  'bg-blue-100 text-blue-800',
-  'bg-green-100 text-green-800',
-  'bg-purple-100 text-purple-800',
-  'bg-orange-100 text-orange-800',
-  'bg-pink-100 text-pink-800',
-  'bg-teal-100 text-teal-800',
-  'bg-yellow-100 text-yellow-800',
-  'bg-red-100 text-red-800',
-  'bg-indigo-100 text-indigo-800',
-  'bg-cyan-100 text-cyan-800',
-]
-
-function buildColorMap(pathMap) {
-  const map = {}
-  let i = 0
-  for (const id of Object.keys(pathMap)) {
-    map[id] = COLORS[i % COLORS.length]
-    i++
-  }
-  return map
+const HOSPITAL_STYLE = {
+  HAC:   { cell: 'bg-blue-100 text-blue-800',   editing: 'ring-2 ring-blue-400 bg-blue-100 text-blue-800' },
+  HOBRA: { cell: 'bg-emerald-100 text-emerald-800', editing: 'ring-2 ring-emerald-400 bg-emerald-100 text-emerald-800' },
 }
 
 /**
@@ -36,7 +18,6 @@ export default function MonthCalendar({
 }) {
   const days = buildMonthDays(year, month)
   const firstDow = days[0].dow
-  const colorMap = buildColorMap(pathMap)
   const editable = !!onEdit
 
   // Edit popover state
@@ -106,9 +87,9 @@ export default function MonthCalendar({
                         }
                         className={`w-full text-left rounded px-1 py-0.5 text-xs truncate transition-colors ${
                           isEditingThis
-                            ? 'ring-2 ring-blue-400 ' + (pathId ? colorMap[pathId] : 'bg-gray-100 text-gray-500')
+                            ? HOSPITAL_STYLE[hospital].editing
                             : pathId
-                            ? colorMap[pathId] + ' hover:opacity-80'
+                            ? HOSPITAL_STYLE[hospital].cell + ' hover:opacity-80'
                             : 'bg-gray-50 text-gray-400 border border-dashed border-gray-200 hover:border-gray-300'
                         }`}
                       >
@@ -118,7 +99,7 @@ export default function MonthCalendar({
                     ) : (
                       <div
                         className={`rounded px-1 py-0.5 text-xs truncate ${
-                          pathId ? colorMap[pathId] : 'text-gray-300'
+                          pathId ? HOSPITAL_STYLE[hospital].cell : 'text-gray-300'
                         }`}
                       >
                         {pathId ? (
@@ -177,13 +158,10 @@ export default function MonthCalendar({
       )}
 
       {/* Legend */}
-      <div className="mt-3 flex flex-wrap gap-2 items-center">
+      <div className="mt-3 flex gap-3 items-center">
         <span className="text-xs text-gray-400 font-medium">Legenda:</span>
-        {sortedPaths.map(([id, p]) => (
-          <span key={id} className={`text-xs px-2 py-0.5 rounded ${colorMap[id]}`}>
-            {p.name}
-          </span>
-        ))}
+        <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">HAC</span>
+        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">HOBRA</span>
       </div>
     </div>
   )
