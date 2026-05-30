@@ -113,9 +113,13 @@ export default function Pathologists() {
     if (!vacationModal || !vacStart || !vacEnd) return
     const p = pathologists.find((x) => x.id === vacationModal)
     if (!p) return
+    function localNoon(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number)
+      return new Date(y, m - 1, d, 12)
+    }
     const vacations = [...(p.vacations || []), {
-      start: Timestamp.fromDate(new Date(vacStart)),
-      end: Timestamp.fromDate(new Date(vacEnd)),
+      start: Timestamp.fromDate(localNoon(vacStart)),
+      end: Timestamp.fromDate(localNoon(vacEnd)),
     }]
     await updateDoc(doc(db, 'pathologists', vacationModal), { vacations })
     setVacationModal(null)
