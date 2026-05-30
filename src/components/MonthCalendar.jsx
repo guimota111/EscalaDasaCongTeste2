@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 
 const HOSPITAL_STYLE = {
   HAC:   { cell: 'bg-blue-100 text-blue-800',   editing: 'ring-2 ring-blue-400 bg-blue-100 text-blue-800' },
-  HOBRA: { cell: 'bg-emerald-100 text-emerald-800', editing: 'ring-2 ring-emerald-400 bg-emerald-100 text-emerald-800' },
+  HOBRA: { cell: 'bg-amber-100 text-amber-800', editing: 'ring-2 ring-amber-400 bg-amber-100 text-amber-800' },
 }
 
 /**
@@ -63,14 +63,14 @@ export default function MonthCalendar({
           return (
             <div
               key={dateStr}
-              className={`rounded-lg border p-1 min-h-[90px] ${
+              className={`rounded-lg border p-1 min-h-[90px] aspect-square ${
                 isWeekend ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'
               }`}
             >
-              <div className={`text-right font-bold text-sm mb-1.5 ${
-                isWeekend ? 'text-blue-700' : 'text-gray-600'
-              }`}>
-                {day}
+              <div className="flex justify-end mb-1.5">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
+                  {day}
+                </span>
               </div>
 
               {(['HAC', 'HOBRA']).map((hospital) => {
@@ -161,7 +161,7 @@ export default function MonthCalendar({
       <div className="mt-3 flex gap-3 items-center">
         <span className="text-xs text-gray-400 font-medium">Legenda:</span>
         <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">HAC</span>
-        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">HOBRA</span>
+        <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">HOBRA</span>
       </div>
     </div>
   )

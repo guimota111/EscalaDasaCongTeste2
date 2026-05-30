@@ -227,7 +227,7 @@ function BalanceChart({ stats, pathMap }) {
           />
           <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
           <Bar dataKey="HAC" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Bar dataKey="HOBRA" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Bar dataKey="HOBRA" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
         </BarChart>
       </ResponsiveContainer>
     </div>

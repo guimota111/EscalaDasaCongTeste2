@@ -37,7 +37,7 @@ export default function BalanceBars({ stats = {}, pathMap = {} }) {
           HAC
         </span>
         <span className="flex items-center gap-1.5 text-xs text-gray-500">
-          <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500" />
+          <span className="inline-block w-3 h-3 rounded-sm bg-amber-500" />
           HOBRA
         </span>
       </div>
@@ -69,11 +69,11 @@ export default function BalanceBars({ stats = {}, pathMap = {} }) {
               <div className="flex items-center gap-1">
                 <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    className="h-full bg-amber-500 rounded-full transition-all duration-300"
                     style={{ width: `${hobraPct}%` }}
                   />
                 </div>
-                <span className="text-xs text-emerald-700 w-5 text-right">{hobra}</span>
+                <span className="text-xs text-amber-700 w-5 text-right">{hobra}</span>
               </div>
             </div>
             <span className="text-xs font-semibold text-gray-700 text-center">{total}</span>

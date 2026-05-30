@@ -190,8 +190,8 @@ export default function Statistics() {
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="HAC Seg-Qui" fill="#3b82f6" />
               <Bar dataKey="HAC Feriados" fill="#93c5fd" />
-              <Bar dataKey="HOBRA Seg-Qui" fill="#10b981" />
-              <Bar dataKey="HOBRA Feriados" fill="#6ee7b7" />
+              <Bar dataKey="HOBRA Seg-Qui" fill="#f59e0b" />
+              <Bar dataKey="HOBRA Feriados" fill="#fcd34d" />
             </BarChart>
           </ResponsiveContainer>
         </div>
