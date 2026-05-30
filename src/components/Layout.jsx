@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Microscope,
+  Palmtree,
 } from 'lucide-react'
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { to: '/feriados', label: 'Feriados', icon: CalendarDays },
   { to: '/gerar-escala', label: 'Gerar Escala', icon: Wand2 },
   { to: '/escalas-anteriores', label: 'Escalas Anteriores', icon: Archive },
+  { to: '/ferias', label: 'Férias', icon: Palmtree },
 ]
 
 export default function Layout({ user }) {

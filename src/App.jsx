@@ -12,6 +12,7 @@ import Holidays from './pages/Holidays'
 import GenerateSchedule from './pages/GenerateSchedule'
 import PreviousSchedules from './pages/PreviousSchedules'
 import ScheduleDetail from './pages/ScheduleDetail'
+import VacationCalendar from './pages/VacationCalendar'
 
 function ProtectedRoute({ user, children }) {
   if (!user) return <Navigate to="/login" replace />
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="gerar-escala" element={<GenerateSchedule />} />
           <Route path="escalas-anteriores" element={<PreviousSchedules />} />
           <Route path="escalas-anteriores/:yearMonth" element={<ScheduleDetail />} />
+          <Route path="ferias" element={<VacationCalendar />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
