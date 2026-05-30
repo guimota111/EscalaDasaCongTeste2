@@ -55,6 +55,7 @@ export default function VacationCalendar() {
   const [pathologists, setPathologists] = useState([])
   const [loading, setLoading] = useState(true)
   const [year, setYear] = useState(new Date().getFullYear())
+  const [tooltip, setTooltip] = useState(null) // { x, y, names[] }
 
   useEffect(() => {
     async function load() {
@@ -86,8 +87,22 @@ export default function VacationCalendar() {
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i)
 
+  function handleMouseEnter(e, names) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 6, names })
+  }
+
   return (
     <div className="space-y-6">
+      {/* Custom tooltip */}
+      {tooltip && (
+        <div
+          className="fixed z-50 pointer-events-none px-2 py-1 rounded bg-gray-900 text-white text-xs shadow-lg whitespace-nowrap -translate-x-1/2 -translate-y-full"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          {tooltip.names.join(', ')}
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Férias</h1>
@@ -161,24 +176,21 @@ export default function VacationCalendar() {
                     const onVac = whoIsOnVacation(dateStr)
                     const hasVac = onVac.length > 0
                     const hexColors = onVac.map((id) => hexMap[id]).filter(Boolean)
+                    const names = onVac
+                      .map((id) => pathologists.find((p) => p.id === id)?.name)
+                      .filter(Boolean)
 
                     return (
                       <div
                         key={dateStr}
-                        title={
-                          hasVac
-                            ? onVac
-                                .map((id) => pathologists.find((p) => p.id === id)?.name)
-                                .filter(Boolean)
-                                .join(', ')
-                            : undefined
-                        }
                         style={hasVac ? vacationBackground(hexColors) : undefined}
+                        onMouseEnter={hasVac ? (e) => handleMouseEnter(e, names) : undefined}
+                        onMouseLeave={hasVac ? () => setTooltip(null) : undefined}
                         className={`
                           relative flex items-center justify-center rounded
                           h-6 text-[10px] font-medium select-none
                           ${hasVac
-                            ? 'text-white'
+                            ? 'text-white cursor-default'
                             : isWeekend
                             ? 'bg-gray-100 text-gray-400'
                             : 'bg-gray-50 text-gray-400'}
