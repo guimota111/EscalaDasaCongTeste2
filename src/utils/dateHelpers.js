@@ -100,17 +100,19 @@ export function hasFifthWeekend(year, month) {
 }
 
 /** Check if a pathologist is on vacation for a given date */
+function toLocalNoon(raw) {
+  const dt = raw?.toDate ? raw.toDate() : (typeof raw === 'string' ? parseISO(raw) : raw)
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12)
+}
+
 export function isOnVacation(pathologist, dateStr) {
   if (!pathologist.vacations?.length) return false
-  const d = parseISO(dateStr)
+  // Parse dateStr as local noon to avoid UTC midnight shifting the day
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d, 12)
   return pathologist.vacations.some((v) => {
     try {
-      const rawStart = v.start?.toDate ? v.start.toDate() : parseISO(v.start)
-      const rawEnd = v.end?.toDate ? v.end.toDate() : parseISO(v.end)
-      // Normalise to noon local time so timezone offsets never shift the date
-      const start = new Date(rawStart.getFullYear(), rawStart.getMonth(), rawStart.getDate(), 12)
-      const end = new Date(rawEnd.getFullYear(), rawEnd.getMonth(), rawEnd.getDate(), 12)
-      return isWithinInterval(d, { start, end })
+      return isWithinInterval(date, { start: toLocalNoon(v.start), end: toLocalNoon(v.end) })
     } catch {
       return false
     }
