@@ -105,8 +105,11 @@ export function isOnVacation(pathologist, dateStr) {
   const d = parseISO(dateStr)
   return pathologist.vacations.some((v) => {
     try {
-      const start = v.start?.toDate ? v.start.toDate() : parseISO(v.start)
-      const end = v.end?.toDate ? v.end.toDate() : parseISO(v.end)
+      const rawStart = v.start?.toDate ? v.start.toDate() : parseISO(v.start)
+      const rawEnd = v.end?.toDate ? v.end.toDate() : parseISO(v.end)
+      // Normalise to noon local time so timezone offsets never shift the date
+      const start = new Date(rawStart.getFullYear(), rawStart.getMonth(), rawStart.getDate(), 12)
+      const end = new Date(rawEnd.getFullYear(), rawEnd.getMonth(), rawEnd.getDate(), 12)
       return isWithinInterval(d, { start, end })
     } catch {
       return false
