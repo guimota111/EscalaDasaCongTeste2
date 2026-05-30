@@ -8,7 +8,7 @@ import {
   REGIME_LABELS, WEEKDAY_FULL, HOSPITALS, tsToDateStr, getWeekendSlots
 } from '../utils/dateHelpers'
 import {
-  UserPlus, Edit2, Trash2, PowerOff, CalendarPlus, X, Check, ChevronDown, ChevronUp
+  UserPlus, Edit2, Trash2, PowerOff, CalendarPlus, X, Check, ChevronDown, ChevronUp, Pencil
 } from 'lucide-react'
 
 const ALL_WEEKEND_SLOTS = [
@@ -32,6 +32,7 @@ export default function Pathologists() {
   const [deactivateModal, setDeactivateModal] = useState(null)
   const [deactivateDate, setDeactivateDate] = useState('')
   const [vacationModal, setVacationModal] = useState(null)
+  const [editVacIdx, setEditVacIdx] = useState(null) // index being edited, null = add mode
   const [vacStart, setVacStart] = useState('')
   const [vacEnd, setVacEnd] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
@@ -109,20 +110,26 @@ export default function Pathologists() {
     await updateDoc(doc(db, 'pathologists', id), { active: true, deactivationDate: null })
   }
 
-  async function addVacation() {
+  function localNoon(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d, 12)
+  }
+
+  async function saveVacation() {
     if (!vacationModal || !vacStart || !vacEnd) return
     const p = pathologists.find((x) => x.id === vacationModal)
     if (!p) return
-    function localNoon(dateStr) {
-      const [y, m, d] = dateStr.split('-').map(Number)
-      return new Date(y, m - 1, d, 12)
-    }
-    const vacations = [...(p.vacations || []), {
+    const entry = {
       start: Timestamp.fromDate(localNoon(vacStart)),
       end: Timestamp.fromDate(localNoon(vacEnd)),
-    }]
+    }
+    const base = p.vacations || []
+    const vacations = editVacIdx !== null
+      ? base.map((v, i) => (i === editVacIdx ? entry : v))
+      : [...base, entry]
     await updateDoc(doc(db, 'pathologists', vacationModal), { vacations })
     setVacationModal(null)
+    setEditVacIdx(null)
     setVacStart('')
     setVacEnd('')
   }
@@ -226,7 +233,7 @@ export default function Pathologists() {
                       </button>
                     )}
                     <button
-                      onClick={() => { setVacationModal(p.id); setVacStart(''); setVacEnd('') }}
+                      onClick={() => { setVacationModal(p.id); setEditVacIdx(null); setVacStart(''); setVacEnd('') }}
                       className="p-1.5 text-gray-400 hover:text-teal-600 rounded transition-colors"
                       title="Adicionar férias"
                     >
@@ -258,6 +265,17 @@ export default function Pathologists() {
                         {p.vacations.map((v, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
                             <span>{tsToDateStr(v.start)} → {tsToDateStr(v.end)}</span>
+                            <button
+                              onClick={() => {
+                                setVacationModal(p.id)
+                                setEditVacIdx(i)
+                                setVacStart(tsToDateStr(v.start))
+                                setVacEnd(tsToDateStr(v.end))
+                              }}
+                              className="text-blue-400 hover:text-blue-600"
+                            >
+                              <Pencil size={12} />
+                            </button>
                             <button
                               onClick={() => removeVacation(p.id, i)}
                               className="text-red-400 hover:text-red-600"
@@ -391,7 +409,10 @@ export default function Pathologists() {
 
       {/* Vacation Modal */}
       {vacationModal && (
-        <Modal title="Adicionar Férias" onClose={() => setVacationModal(null)}>
+        <Modal
+          title={editVacIdx !== null ? 'Editar Férias' : 'Adicionar Férias'}
+          onClose={() => { setVacationModal(null); setEditVacIdx(null); setVacStart(''); setVacEnd('') }}
+        >
           <div className="space-y-4">
             <div>
               <label className="label">Data de Início</label>
@@ -402,13 +423,13 @@ export default function Pathologists() {
               <input type="date" className="input" value={vacEnd} onChange={(e) => setVacEnd(e.target.value)} />
             </div>
             <div className="flex justify-end gap-2">
-              <button className="btn-secondary" onClick={() => setVacationModal(null)}>Cancelar</button>
+              <button className="btn-secondary" onClick={() => { setVacationModal(null); setEditVacIdx(null); setVacStart(''); setVacEnd('') }}>Cancelar</button>
               <button
                 className="btn-primary"
-                onClick={addVacation}
+                onClick={saveVacation}
                 disabled={!vacStart || !vacEnd || vacEnd < vacStart}
               >
-                Adicionar
+                {editVacIdx !== null ? 'Salvar' : 'Adicionar'}
               </button>
             </div>
           </div>
