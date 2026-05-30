@@ -19,6 +19,38 @@ const PALETTE = [
   'bg-rose-400',
 ]
 
+const PALETTE_HEX = [
+  '#60a5fa',
+  '#34d399',
+  '#c084fc',
+  '#fb923c',
+  '#f472b6',
+  '#2dd4bf',
+  '#facc15',
+  '#f87171',
+  '#818cf8',
+  '#22d3ee',
+  '#a3e635',
+  '#fb7185',
+]
+
+function vacationBackground(colors) {
+  if (colors.length === 0) return {}
+  if (colors.length === 1) return { backgroundColor: colors[0] }
+  if (colors.length === 2) {
+    return {
+      background: `linear-gradient(135deg, ${colors[0]} 50%, ${colors[1]} 50%)`,
+    }
+  }
+  // 3+ : equal vertical strips
+  const pct = 100 / colors.length
+  const stops = colors.flatMap((c, i) => [
+    `${c} ${(i * pct).toFixed(1)}%`,
+    `${c} ${((i + 1) * pct).toFixed(1)}%`,
+  ])
+  return { background: `linear-gradient(to right, ${stops.join(', ')})` }
+}
+
 export default function VacationCalendar() {
   const [pathologists, setPathologists] = useState([])
   const [loading, setLoading] = useState(true)
@@ -34,12 +66,14 @@ export default function VacationCalendar() {
     load()
   }, [])
 
-  // Assign a stable color to each pathologist
-  const colorMap = {}
+  // Assign a stable color to each pathologist (class for legend, hex for day squares)
+  const colorMap = {}   // pathId → tailwind class (legend)
+  const hexMap = {}     // pathId → hex string (day squares)
   pathologists
     .filter((p) => p.vacations?.length)
     .forEach((p, i) => {
       colorMap[p.id] = PALETTE[i % PALETTE.length]
+      hexMap[p.id] = PALETTE_HEX[i % PALETTE_HEX.length]
     })
 
   // Pathologists that have at least one vacation ever (for legend)
@@ -126,8 +160,7 @@ export default function VacationCalendar() {
                   {days.map(({ dateStr, day, isWeekend }) => {
                     const onVac = whoIsOnVacation(dateStr)
                     const hasVac = onVac.length > 0
-                    const multipleVac = onVac.length > 1
-                    const color = hasVac ? colorMap[onVac[0]] : null
+                    const hexColors = onVac.map((id) => hexMap[id]).filter(Boolean)
 
                     return (
                       <div
@@ -140,20 +173,18 @@ export default function VacationCalendar() {
                                 .join(', ')
                             : undefined
                         }
+                        style={hasVac ? vacationBackground(hexColors) : undefined}
                         className={`
                           relative flex items-center justify-center rounded
                           h-6 text-[10px] font-medium select-none
                           ${hasVac
-                            ? `${color} text-white`
+                            ? 'text-white'
                             : isWeekend
                             ? 'bg-gray-100 text-gray-400'
                             : 'bg-gray-50 text-gray-400'}
                         `}
                       >
                         {day}
-                        {multipleVac && (
-                          <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-white opacity-80" />
-                        )}
                       </div>
                     )
                   })}
