@@ -12,6 +12,7 @@ export default function Statistics() {
   const [allStats, setAllStats] = useState({})
   const [loading, setLoading] = useState(true)
   const [hideInactive, setHideInactive] = useState(true)
+  const [hideFuture, setHideFuture] = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -25,9 +26,14 @@ export default function Statistics() {
         const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
         setPathologists(paths)
 
+        const now = new Date()
+        const currentYear = now.getFullYear()
+        const currentMonth = now.getMonth() + 1
+
         const agg = {}
         for (const sd of statsSnap.docs) {
-          const shifts = sd.data().shifts || {}
+          const { year: y, month: m, shifts = {} } = sd.data()
+          if (hideFuture && (y > currentYear || (y === currentYear && m > currentMonth))) continue
           for (const [pathId, data] of Object.entries(shifts)) {
             if (!agg[pathId]) {
               agg[pathId] = { HAC: { weekday: 0, holiday: 0 }, HOBRA: { weekday: 0, holiday: 0 }, fifthWeekend: 0 }
@@ -45,7 +51,7 @@ export default function Statistics() {
       }
     }
     load()
-  }, [])
+  }, [hideFuture])
 
   function getTotal(pathId) {
     const s = allStats[pathId] || {}
@@ -83,23 +89,42 @@ export default function Statistics() {
           <h1 className="text-2xl font-bold text-gray-900">Estatísticas</h1>
           <p className="text-gray-500 text-sm">Contagem acumulada de plantões (regime Normal)</p>
         </div>
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <span className="text-sm text-gray-600">Ocultar desligados</span>
-          <button
-            role="switch"
-            aria-checked={hideInactive}
-            onClick={() => setHideInactive((v) => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              hideInactive ? 'bg-blue-600' : 'bg-gray-300'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                hideInactive ? 'translate-x-6' : 'translate-x-1'
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <span className="text-sm text-gray-600">Ocultar desligados</span>
+            <button
+              role="switch"
+              aria-checked={hideInactive}
+              onClick={() => setHideInactive((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                hideInactive ? 'bg-blue-600' : 'bg-gray-300'
               }`}
-            />
-          </button>
-        </label>
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  hideInactive ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <span className="text-sm text-gray-600">Ocultar meses futuros</span>
+            <button
+              role="switch"
+              aria-checked={hideFuture}
+              onClick={() => setHideFuture((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                hideFuture ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  hideFuture ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+        </div>
       </div>
 
       <div className="card">
