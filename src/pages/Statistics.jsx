@@ -4,10 +4,11 @@ import { db } from '../firebase'
 import { HOSPITALS } from '../utils/dateHelpers'
 import { computeStats } from '../utils/scheduleAlgorithm'
 import MonWedTable from '../components/MonWedTable'
+import ReportModal from '../components/ReportModal'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
-import { BarChart2, CalendarDays } from 'lucide-react'
+import { BarChart2, CalendarDays, FileBarChart, FileText } from 'lucide-react'
 
 export default function Statistics() {
   const [pathologists, setPathologists] = useState([])
@@ -15,6 +16,7 @@ export default function Statistics() {
   const [loading, setLoading] = useState(true)
   const [hideInactive, setHideInactive] = useState(true)
   const [hideFuture, setHideFuture] = useState(true)
+  const [reportMode, setReportMode] = useState(null) // 'monthly' | 'annual' | null
 
   useEffect(() => {
     async function load() {
@@ -110,6 +112,19 @@ export default function Statistics() {
           <h1 className="text-2xl font-bold text-gray-900">Estatísticas</h1>
           <p className="text-gray-500 text-sm">Contagem acumulada de plantões (regime Normal)</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn-primary" onClick={() => setReportMode('monthly')}>
+            <FileBarChart size={16} />
+            Exportar dados mensais
+          </button>
+          <button className="btn-primary" onClick={() => setReportMode('annual')}>
+            <FileText size={16} />
+            Exportar dados anuais
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <span className="text-sm text-gray-600">Ocultar desligados</span>
@@ -227,6 +242,10 @@ export default function Statistics() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      )}
+
+      {reportMode && (
+        <ReportModal mode={reportMode} onClose={() => setReportMode(null)} />
       )}
     </div>
   )
