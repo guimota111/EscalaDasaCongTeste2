@@ -1,5 +1,5 @@
 import React from 'react'
-import { MONTH_NAMES, WEEKDAY_NAMES } from '../utils/dateHelpers'
+import { MONTH_NAMES } from '../utils/dateHelpers'
 import { pathColor, getContrastText } from '../utils/colors'
 
 /** Lista inclusiva de 'YYYY-MM-DD' entre start e end. */
@@ -50,9 +50,10 @@ export default function ScheduleImage({ startStr, endStr, scheduleDays = {}, pat
     ? `${MONTH_NAMES[sm - 1]} ${sy}`
     : `${sd} de ${MONTH_NAMES[sm - 1]} – ${ed} de ${MONTH_NAMES[em - 1]} de ${ey}`
 
-  // Monta a grade em semanas (Dom→Sáb)
+  // Monta a grade em semanas (Seg→Dom)
   const firstDow = new Date(sy, sm - 1, sd).getDay()
-  const cells = [...Array(firstDow).fill(null), ...days]
+  const lead = (firstDow + 6) % 7 // converte para semana iniciando na segunda
+  const cells = [...Array(lead).fill(null), ...days]
   while (cells.length % 7 !== 0) cells.push(null)
   const weeks = []
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
@@ -103,12 +104,12 @@ export default function ScheduleImage({ startStr, endStr, scheduleDays = {}, pat
         <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{header}</div>
       </div>
 
-      {/* Cabeçalho de dias da semana */}
+      {/* Cabeçalho de dias da semana (Seg→Dom) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 6 }}>
-        {WEEKDAY_NAMES.map((d, i) => (
+        {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d, i) => (
           <div key={d} style={{
             textAlign: 'center', fontSize: 12, fontWeight: 700,
-            color: i === 0 || i === 6 ? '#1d4ed8' : '#6b7280', padding: '2px 0',
+            color: i >= 5 ? '#1d4ed8' : '#6b7280', padding: '2px 0',
           }}>{d}</div>
         ))}
       </div>
