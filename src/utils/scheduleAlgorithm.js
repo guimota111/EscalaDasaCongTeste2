@@ -17,7 +17,7 @@ import {
  */
 export function generateSchedule(
   year, month, pathologists, existingStats, holidays,
-  prevMonthWeekendAssignments = {}
+  prevMonthWeekendAssignments = {}, lockedDays = {}
 ) {
   const days = buildMonthDays(year, month)
   const weekendGroups = getMonthWeekendGroups(year, month)
@@ -66,6 +66,24 @@ export function generateSchedule(
     if (!shiftCount[pathId]) shiftCount[pathId] = { HAC: 0, HOBRA: 0 }
     shiftCount[pathId][hospital]++
     lastAssigned[pathId] = dateStr
+  }
+
+  // --------------------------------------------------------------------------
+  // STEP 0: Pre-divided days carried over from the previous month's generation.
+  // These belong to THIS month (e.g. the user added the first days of this
+  // month while dividing the previous one) and must be honored exactly.
+  // Seeded first so all later steps skip them via the `if (result[...]) continue`
+  // guards, and so fixed/weekend assignments never overwrite a manual division.
+  // --------------------------------------------------------------------------
+  const lockedSet = new Set()
+  for (const [dateStr, slot] of Object.entries(lockedDays || {})) {
+    if (!result[dateStr]) continue // only days that fall inside this month
+    let any = false
+    for (const hospital of HOSPITALS) {
+      const pathId = slot?.[hospital]
+      if (pathId) { assign(dateStr, hospital, pathId); any = true }
+    }
+    if (any) lockedSet.add(dateStr)
   }
 
   // --------------------------------------------------------------------------
@@ -175,6 +193,16 @@ export function generateSchedule(
   const monthCount = {} // { pathId: { HAC: n, HOBRA: n } }
   for (const p of normalPaths) monthCount[p.id] = { HAC: 0, HOBRA: 0 }
 
+  // Account for pre-divided (locked) weekday assignments already placed in STEP 0
+  // so within-month balance treats them as real shifts already taken.
+  for (const { dateStr, isWeekday } of days) {
+    if (!isWeekday) continue
+    for (const hospital of HOSPITALS) {
+      const pid = result[dateStr][hospital]
+      if (pid && monthCount[pid]) monthCount[pid][hospital]++
+    }
+  }
+
   function monthTotal(pathId) {
     return (monthCount[pathId]?.HAC || 0) + (monthCount[pathId]?.HOBRA || 0)
   }
@@ -253,6 +281,7 @@ export function generateSchedule(
       let bestDay = null
       let bestScore = -Infinity
       for (const { dateStr } of candidateDays) {
+        if (lockedSet.has(dateStr)) continue // never displace a pre-divided day
         const current = result[dateStr][hospital]
         if (!current || current === p.id) continue
         const currentLoad = monthTotal(current)

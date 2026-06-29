@@ -10,7 +10,8 @@ import {
 import { generateSchedule, computeStats } from '../utils/scheduleAlgorithm'
 import BalanceBars from '../components/BalanceBars'
 import MonWedTable from '../components/MonWedTable'
-import { Wand2, Save, CheckCircle, AlertTriangle, Calendar } from 'lucide-react'
+import { Wand2, Save, CheckCircle, AlertTriangle, Calendar, Plus, X, CornerDownRight } from 'lucide-react'
+import { format } from 'date-fns'
 
 export default function GenerateSchedule() {
   const now = new Date()
@@ -21,6 +22,8 @@ export default function GenerateSchedule() {
   const [holidays, setHolidays] = useState([])
   const [existingStats, setExistingStats] = useState({})
   const [prevWeekendAssignments, setPrevWeekendAssignments] = useState({})
+  const [prevExtraDays, setPrevExtraDays] = useState({})
+  const [prefilledDates, setPrefilledDates] = useState(() => new Set())
   const [schedule, setSchedule] = useState(null)
   const [weekendAssignments, setWeekendAssignments] = useState({})
   const [liveStats, setLiveStats] = useState({})
@@ -68,11 +71,14 @@ export default function GenerateSchedule() {
       }
       setExistingStats(agg)
 
-      // Previous month weekend assignments for rotation
+      // Previous month weekend assignments (rotation) and pre-divided days
+      // (days of THIS month that were already split while dividing last month).
       if (prevSchedSnap.exists()) {
         setPrevWeekendAssignments(prevSchedSnap.data().weekendAssignments || {})
+        setPrevExtraDays(prevSchedSnap.data().extraDays || {})
       } else {
         setPrevWeekendAssignments({})
+        setPrevExtraDays({})
       }
     }
     load()
@@ -80,22 +86,59 @@ export default function GenerateSchedule() {
 
   useEffect(() => {
     if (!schedule) return
-    const stats = computeStats(schedule, pathologists, holidays)
-    setLiveStats(stats)
-  }, [schedule, pathologists, holidays, weekendAssignments])
+    // Live balance reflects only days that belong to the current month —
+    // pre-divided extra days of the next month are counted when that month is generated.
+    const prefix = scheduleKey(year, month)
+    const monthDays = {}
+    for (const [dateStr, slot] of Object.entries(schedule)) {
+      if (dateStr.slice(0, 7) === prefix) monthDays[dateStr] = slot
+    }
+    setLiveStats(computeStats(monthDays, pathologists, holidays))
+  }, [schedule, pathologists, holidays, weekendAssignments, year, month])
 
   function handleGenerate() {
     setGenerating(true)
     setPublished(false)
     try {
+      // Days of this month that were already divided while generating last month
+      const prefix = scheduleKey(year, month)
+      const lockedDays = {}
+      for (const [dateStr, slot] of Object.entries(prevExtraDays)) {
+        if (dateStr.slice(0, 7) === prefix) lockedDays[dateStr] = slot
+      }
+
       const { schedule: sched, weekendAssignments: wa } = generateSchedule(
-        year, month, pathologists, existingStats, holidays, prevWeekendAssignments
+        year, month, pathologists, existingStats, holidays, prevWeekendAssignments, lockedDays
       )
       setSchedule(sched)
       setWeekendAssignments(wa)
+      setPrefilledDates(new Set(Object.keys(lockedDays)))
     } finally {
       setGenerating(false)
     }
+  }
+
+  // Append the next calendar day (belongs to the next month) so the user can
+  // pre-divide a few days ahead. Each click adds one more day at the end.
+  function handleAddDay() {
+    setSchedule((prev) => {
+      if (!prev) return prev
+      const lastDayOfMonth = buildMonthDays(year, month).slice(-1)[0].dateStr
+      const maxStr = Object.keys(prev).reduce((a, b) => (b > a ? b : a), lastDayOfMonth)
+      const [y, m, d] = maxStr.split('-').map(Number)
+      const next = new Date(y, m - 1, d + 1)
+      const nextStr = format(next, 'yyyy-MM-dd')
+      if (prev[nextStr]) return prev
+      return { ...prev, [nextStr]: { HAC: null, HOBRA: null } }
+    })
+  }
+
+  function handleRemoveExtraDay(dateStr) {
+    setSchedule((prev) => {
+      const next = { ...prev }
+      delete next[dateStr]
+      return next
+    })
   }
 
   function handleCellChange(dateStr, hospital, pathId) {
@@ -129,14 +172,26 @@ export default function GenerateSchedule() {
     setPublishing(true)
     try {
       const key = scheduleKey(year, month)
-      const stats = computeStats(schedule, pathologists, holidays)
+
+      // Split into days that belong to this month and "extra" pre-divided days
+      // of the following month. Stats count only this month's days; the extra
+      // days are absorbed (and counted) when the next month's schedule is generated.
+      const days = {}
+      const extraDays = {}
+      for (const [dateStr, slot] of Object.entries(schedule)) {
+        if (dateStr.slice(0, 7) === key) days[dateStr] = slot
+        else extraDays[dateStr] = slot
+      }
+
+      const stats = computeStats(days, pathologists, holidays)
 
       await setDoc(doc(db, 'schedules', key), {
         year,
         month,
         publishedAt: Timestamp.now(),
-        days: schedule,
+        days,
         weekendAssignments,
+        extraDays,
       })
 
       await setDoc(doc(db, 'statistics', key), {
@@ -154,6 +209,12 @@ export default function GenerateSchedule() {
   const days = buildMonthDays(year, month)
   const activePaths = pathologists.filter((p) => p.active !== false)
   const fifthWeekend = schedule ? hasFifthWeekend(year, month) : false
+
+  // Extra pre-divided days (belonging to the next month) added by the user
+  const monthPrefix = scheduleKey(year, month)
+  const extraDates = schedule
+    ? Object.keys(schedule).filter((d) => d.slice(0, 7) !== monthPrefix).sort()
+    : []
 
   return (
     <div className="space-y-6">
@@ -229,12 +290,18 @@ export default function GenerateSchedule() {
               <tbody>
                 {days.map(({ dateStr, day, dow, isWeekend }) => {
                   const slot = schedule[dateStr] || {}
+                  const prefilled = prefilledDates.has(dateStr)
                   return (
                     <tr
                       key={dateStr}
                       className={`border-b border-gray-100 ${isWeekend ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                     >
-                      <td className="py-1 pr-2 font-medium text-gray-700">{day}</td>
+                      <td className="py-1 pr-2 font-medium text-gray-700">
+                        {day}
+                        {prefilled && (
+                          <span title="Pré-dividido no mês anterior" className="ml-1 text-amber-500">↩</span>
+                        )}
+                      </td>
                       <td className="py-1 pr-2 text-gray-500">{WEEKDAY_NAMES[dow]}</td>
                       {HOSPITALS.map((h) => (
                         <td key={h} className="py-0.5 pr-2">
@@ -253,8 +320,66 @@ export default function GenerateSchedule() {
                     </tr>
                   )
                 })}
+
+                {extraDates.length > 0 && (
+                  <tr className="bg-amber-50">
+                    <td colSpan={2 + HOSPITALS.length} className="py-1 px-2 text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+                      Dias do próximo mês (antecipação)
+                    </td>
+                  </tr>
+                )}
+
+                {extraDates.map((dateStr) => {
+                  const [y, m, d] = dateStr.split('-').map(Number)
+                  const dow = new Date(y, m - 1, d).getDay()
+                  const slot = schedule[dateStr] || {}
+                  return (
+                    <tr key={dateStr} className="border-b border-amber-100 bg-amber-50/60">
+                      <td className="py-1 pr-2 font-medium text-amber-800 whitespace-nowrap">
+                        <button
+                          onClick={() => handleRemoveExtraDay(dateStr)}
+                          title="Remover este dia"
+                          className="text-amber-400 hover:text-red-500 mr-1 align-middle"
+                        >
+                          <X size={12} />
+                        </button>
+                        {d}/{MONTH_NAMES[m - 1].slice(0, 3)}
+                      </td>
+                      <td className="py-1 pr-2 text-gray-500">{WEEKDAY_NAMES[dow]}</td>
+                      {HOSPITALS.map((h) => (
+                        <td key={h} className="py-0.5 pr-2">
+                          <select
+                            className="text-xs border border-amber-200 rounded px-1 py-0.5 bg-white w-full max-w-[160px]"
+                            value={slot[h] || ''}
+                            onChange={(e) => handleCellChange(dateStr, h, e.target.value)}
+                          >
+                            <option value="">— vazio —</option>
+                            {activePaths.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
+
+            <div className="mt-3">
+              <button
+                onClick={handleAddDay}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+              >
+                <Plus size={14} />
+                Adicionar dias
+              </button>
+              <p className="text-[11px] text-gray-400 mt-1.5 flex items-start gap-1">
+                <CornerDownRight size={12} className="mt-0.5 flex-shrink-0" />
+                Adicione dias do próximo mês para já dividi-los. Eles contam no mês
+                correto e aparecem pré-preenchidos ao gerar a escala seguinte.
+              </p>
+            </div>
           </div>
 
           {/* Live balance + weekend controls */}
