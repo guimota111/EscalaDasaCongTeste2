@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { buildMonthDays, WEEKDAY_NAMES } from '../utils/dateHelpers'
+import { buildMonthDays } from '../utils/dateHelpers'
 import { pathColor, getContrastText } from '../utils/colors'
 import { X } from 'lucide-react'
 
@@ -89,13 +89,13 @@ export default function MonthCalendar({
       {/* ── Desktop grid (hidden on mobile) ── */}
       <div className="hidden md:block">
         <div className="grid grid-cols-7 mb-1">
-          {WEEKDAY_NAMES.map((d) => (
+          {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d) => (
             <div key={d} className="text-center text-xs font-semibold text-gray-500 py-1">{d}</div>
           ))}
         </div>
 
         <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: firstDow }).map((_, i) => <div key={`e-${i}`} />)}
+          {Array.from({ length: (firstDow + 6) % 7 }).map((_, i) => <div key={`e-${i}`} />)}
 
           {days.map(({ dateStr, day, isWeekend }) => {
             const slot = scheduleDays[dateStr] || {}
