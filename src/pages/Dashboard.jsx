@@ -4,7 +4,8 @@ import { db } from '../firebase'
 import { scheduleKey, formatMonthYear, MONTH_NAMES } from '../utils/dateHelpers'
 import { computeStats } from '../utils/scheduleAlgorithm'
 import MonthCalendar from '../components/MonthCalendar'
-import { CalendarDays, TrendingUp, Edit2, Save, X } from 'lucide-react'
+import ExportScheduleModal from '../components/ExportScheduleModal'
+import { CalendarDays, TrendingUp, Edit2, Save, X, Image as ImageIcon } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editedDays, setEditedDays] = useState(null) // local edits before save
+  const [showExport, setShowExport] = useState(false)
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
 
@@ -36,7 +38,7 @@ export default function Dashboard() {
           getDocs(collection(db, 'holidays')),
         ])
         const map = {}
-        pathSnap.docs.forEach((d) => (map[d.id] = d.data()))
+        pathSnap.docs.forEach((d) => (map[d.id] = { id: d.id, ...d.data() }))
         setPathMap(map)
         setHolidays(holSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
 
@@ -141,13 +143,22 @@ export default function Dashboard() {
                 {formatMonthYear(year, month)}
               </h2>
               {!editMode ? (
-                <button
-                  className="btn-secondary text-xs"
-                  onClick={() => setEditMode(true)}
-                >
-                  <Edit2 size={14} />
-                  Editar Escala
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    className="btn-secondary text-xs"
+                    onClick={() => setShowExport(true)}
+                  >
+                    <ImageIcon size={14} />
+                    Exportar imagem
+                  </button>
+                  <button
+                    className="btn-secondary text-xs"
+                    onClick={() => setEditMode(true)}
+                  >
+                    <Edit2 size={14} />
+                    Editar Escala
+                  </button>
+                </div>
               ) : (
                 <div className="flex gap-2">
                   <button className="btn-secondary text-xs" onClick={handleCancelEdit}>
@@ -185,6 +196,26 @@ export default function Dashboard() {
           <BalanceChart stats={stats || {}} pathMap={pathMap} />
         </div>
       )}
+
+      {showExport && schedule && (() => {
+        const yearMonth = scheduleKey(year, month)
+        const combined = { ...displayDays, ...(schedule.extraDays || {}) }
+        const keys = Object.keys(combined).sort()
+        const lastDom = new Date(year, month, 0).getDate()
+        const monthStart = `${yearMonth}-01`
+        const monthEnd = `${yearMonth}-${String(lastDom).padStart(2, '0')}`
+        return (
+          <ExportScheduleModal
+            scheduleDays={combined}
+            pathMap={pathMap}
+            minDate={keys[0] || monthStart}
+            maxDate={keys[keys.length - 1] || monthEnd}
+            defaultStart={monthStart}
+            defaultEnd={monthEnd}
+            onClose={() => setShowExport(false)}
+          />
+        )
+      })()}
     </div>
   )
 }

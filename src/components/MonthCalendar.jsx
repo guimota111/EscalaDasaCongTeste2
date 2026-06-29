@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { buildMonthDays, WEEKDAY_NAMES } from '../utils/dateHelpers'
+import { pathColor, getContrastText } from '../utils/colors'
 import { X } from 'lucide-react'
 
-const HOSPITAL_STYLE = {
-  HAC:   { cell: 'bg-blue-100 text-blue-800',   editing: 'ring-2 ring-blue-400 bg-blue-100 text-blue-800' },
-  HOBRA: { cell: 'bg-emerald-100 text-emerald-800', editing: 'ring-2 ring-emerald-400 bg-emerald-100 text-emerald-800' },
-}
+// Cor do anel ao editar, por hospital (o fundo do card usa a cor do patologista)
+const RING = { HAC: 'ring-blue-400', HOBRA: 'ring-emerald-400' }
 
 const WEEKDAY_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -77,10 +76,11 @@ export default function MonthCalendar({
   )
 
   const legend = (
-    <div className="mt-3 flex gap-3 items-center">
-      <span className="text-xs text-gray-400 font-medium">Legenda:</span>
-      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">HAC</span>
-      <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">HOBRA</span>
+    <div className="mt-3 flex gap-2 items-center flex-wrap">
+      <span className="text-xs text-gray-400 font-medium">Cada cor representa um patologista.</span>
+      <span className="text-xs text-gray-400">Cada card indica o hospital:</span>
+      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">HAC</span>
+      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">HOBRA</span>
     </div>
   )
 
@@ -114,16 +114,19 @@ export default function MonthCalendar({
                 {(['HAC', 'HOBRA']).map((hospital) => {
                   const pathId = slot[hospital]
                   const isEditingThis = editing?.dateStr === dateStr && editing?.hospital === hospital
+                  const bg = pathId ? pathColor(pathMap[pathId]) : null
+                  const fg = bg ? getContrastText(bg) : null
                   return (
                     <div key={hospital} className="mb-0.5">
                       {editable ? (
                         <button
                           onClick={() => setEditing(isEditingThis ? null : { dateStr, hospital })}
+                          style={pathId ? { backgroundColor: bg, color: fg } : undefined}
                           className={`w-full text-left rounded px-1 py-0.5 text-xs truncate transition-colors ${
                             isEditingThis
-                              ? HOSPITAL_STYLE[hospital].editing
+                              ? `ring-2 ${RING[hospital]} ${pathId ? '' : 'bg-gray-50'}`
                               : pathId
-                              ? HOSPITAL_STYLE[hospital].cell + ' hover:opacity-80'
+                              ? 'hover:opacity-80'
                               : 'bg-gray-50 text-gray-400 border border-dashed border-gray-200 hover:border-gray-300'
                           }`}
                         >
@@ -131,11 +134,12 @@ export default function MonthCalendar({
                           {pathId ? getShortName(pathId) : '—'}
                         </button>
                       ) : (
-                        <div className={`rounded px-1 py-0.5 text-xs truncate ${
-                          pathId ? HOSPITAL_STYLE[hospital].cell : 'text-gray-300'
-                        }`}>
+                        <div
+                          style={pathId ? { backgroundColor: bg, color: fg } : undefined}
+                          className={`rounded px-1 py-0.5 text-xs truncate ${pathId ? '' : 'text-gray-300'}`}
+                        >
                           {pathId ? (
-                            <><span className="font-semibold">{hospital} </span>{getShortName(pathId)}</>
+                            <><span className="font-semibold opacity-60">{hospital} </span>{getShortName(pathId)}</>
                           ) : (
                             <span className="font-semibold text-[10px] opacity-40">{hospital}</span>
                           )}
@@ -184,15 +188,18 @@ export default function MonthCalendar({
                 {(['HAC', 'HOBRA']).map((hospital) => {
                   const pathId = slot[hospital]
                   const isEditingThis = editing?.dateStr === dateStr && editing?.hospital === hospital
+                  const bg = pathId ? pathColor(pathMap[pathId]) : null
+                  const fg = bg ? getContrastText(bg) : null
                   return editable ? (
                     <button
                       key={hospital}
                       onClick={() => setEditing(isEditingThis ? null : { dateStr, hospital })}
+                      style={pathId ? { backgroundColor: bg, color: fg } : undefined}
                       className={`text-left rounded px-2 py-1 text-sm transition-colors ${
                         isEditingThis
-                          ? HOSPITAL_STYLE[hospital].editing
+                          ? `ring-2 ${RING[hospital]} ${pathId ? '' : 'bg-gray-50'}`
                           : pathId
-                          ? HOSPITAL_STYLE[hospital].cell + ' hover:opacity-80'
+                          ? 'hover:opacity-80'
                           : 'bg-gray-50 text-gray-400 border border-dashed border-gray-200'
                       }`}
                     >
@@ -202,12 +209,11 @@ export default function MonthCalendar({
                   ) : (
                     <div
                       key={hospital}
-                      className={`rounded px-2 py-1 text-sm ${
-                        pathId ? HOSPITAL_STYLE[hospital].cell : 'text-gray-300'
-                      }`}
+                      style={pathId ? { backgroundColor: bg, color: fg } : undefined}
+                      className={`rounded px-2 py-1 text-sm ${pathId ? '' : 'text-gray-300'}`}
                     >
                       {pathId ? (
-                        <><span className="font-semibold text-xs mr-1">{hospital}</span>{getFullName(pathId)}</>
+                        <><span className="font-semibold text-xs mr-1 opacity-60">{hospital}</span>{getFullName(pathId)}</>
                       ) : (
                         <span className="text-xs opacity-40">{hospital} —</span>
                       )}
