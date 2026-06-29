@@ -2,37 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { getDocs, collection } from 'firebase/firestore'
 import { db } from '../firebase'
 import { buildMonthDays, MONTH_NAMES, WEEKDAY_NAMES, isOnVacation } from '../utils/dateHelpers'
+import { pathColor } from '../utils/colors'
 import { Palmtree } from 'lucide-react'
-
-const PALETTE = [
-  'bg-blue-400',
-  'bg-emerald-400',
-  'bg-purple-400',
-  'bg-orange-400',
-  'bg-pink-400',
-  'bg-teal-400',
-  'bg-yellow-400',
-  'bg-red-400',
-  'bg-indigo-400',
-  'bg-cyan-400',
-  'bg-lime-400',
-  'bg-rose-400',
-]
-
-const PALETTE_HEX = [
-  '#60a5fa',
-  '#34d399',
-  '#c084fc',
-  '#fb923c',
-  '#f472b6',
-  '#2dd4bf',
-  '#facc15',
-  '#f87171',
-  '#818cf8',
-  '#22d3ee',
-  '#a3e635',
-  '#fb7185',
-]
 
 function vacationBackground(colors) {
   if (colors.length === 0) return {}
@@ -67,15 +38,9 @@ export default function VacationCalendar() {
     load()
   }, [])
 
-  // Assign a stable color to each pathologist (class for legend, hex for day squares)
-  const colorMap = {}   // pathId → tailwind class (legend)
-  const hexMap = {}     // pathId → hex string (day squares)
-  pathologists
-    .filter((p) => p.vacations?.length)
-    .forEach((p, i) => {
-      colorMap[p.id] = PALETTE[i % PALETTE.length]
-      hexMap[p.id] = PALETTE_HEX[i % PALETTE_HEX.length]
-    })
+  // Cada patologista usa a sua própria cor (definida em Patologistas, ou automática)
+  const hexMap = {} // pathId → hex
+  pathologists.forEach((p) => { hexMap[p.id] = pathColor(p) })
 
   // Pathologists that have at least one vacation ever (for legend)
   const pathsWithVacation = pathologists.filter((p) => p.vacations?.length)
@@ -132,7 +97,7 @@ export default function VacationCalendar() {
               if (!p.vacations?.length) return null
               return (
                 <span key={p.id} className="flex items-center gap-1.5 text-xs text-gray-700">
-                  <span className={`inline-block w-3 h-3 rounded-sm ${colorMap[p.id]}`} />
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: hexMap[p.id] }} />
                   {p.name}
                   {!p.active && <span className="text-red-400">(desligado)</span>}
                 </span>
