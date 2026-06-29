@@ -197,21 +197,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {showExport && schedule && (() => {
+      {showExport && (() => {
         const yearMonth = scheduleKey(year, month)
-        const combined = { ...displayDays, ...(schedule.extraDays || {}) }
-        const keys = Object.keys(combined).sort()
         const lastDom = new Date(year, month, 0).getDate()
-        const monthStart = `${yearMonth}-01`
-        const monthEnd = `${yearMonth}-${String(lastDom).padStart(2, '0')}`
         return (
           <ExportScheduleModal
-            scheduleDays={combined}
             pathMap={pathMap}
-            minDate={keys[0] || monthStart}
-            maxDate={keys[keys.length - 1] || monthEnd}
-            defaultStart={monthStart}
-            defaultEnd={monthEnd}
+            defaultStart={`${yearMonth}-01`}
+            defaultEnd={`${yearMonth}-${String(lastDom).padStart(2, '0')}`}
             onClose={() => setShowExport(false)}
           />
         )

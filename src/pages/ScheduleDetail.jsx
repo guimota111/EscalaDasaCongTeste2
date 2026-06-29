@@ -89,22 +89,12 @@ export default function ScheduleDetail() {
       )}
 
       {showExport && schedule && (() => {
-        // Combina os dias do mês com os dias extras (antecipação do próximo mês)
-        const combined = { ...(schedule.days || {}), ...(schedule.extraDays || {}) }
-        const keys = Object.keys(combined).sort()
         const lastDom = new Date(year, month, 0).getDate()
-        const monthStart = `${yearMonth}-01`
-        const monthEnd = `${yearMonth}-${String(lastDom).padStart(2, '0')}`
-        const minDate = keys[0] || monthStart
-        const maxDate = keys[keys.length - 1] || monthEnd
         return (
           <ExportScheduleModal
-            scheduleDays={combined}
             pathMap={pathMap}
-            minDate={minDate}
-            maxDate={maxDate}
-            defaultStart={monthStart}
-            defaultEnd={monthEnd}
+            defaultStart={`${yearMonth}-01`}
+            defaultEnd={`${yearMonth}-${String(lastDom).padStart(2, '0')}`}
             onClose={() => setShowExport(false)}
           />
         )
