@@ -1,5 +1,5 @@
 import React from 'react'
-import { MONTH_NAMES, WEEKDAY_NAMES, HOSPITALS } from '../utils/dateHelpers'
+import { MONTH_NAMES, WEEKDAY_NAMES } from '../utils/dateHelpers'
 import { pathColor, getContrastText } from '../utils/colors'
 
 /** Lista inclusiva de 'YYYY-MM-DD' entre start e end. */
@@ -96,21 +96,11 @@ export default function ScheduleImage({ startStr, endStr, scheduleDays = {}, pat
       fontFamily: 'Inter, system-ui, sans-serif', color: '#111827',
     }}>
       {/* Cabeçalho */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8', letterSpacing: 1, textTransform: 'uppercase' }}>
-            DASA Brasília — Escala de Congelação
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{header}</div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8', letterSpacing: 1, textTransform: 'uppercase' }}>
+          DASA Brasília — Escala de Congelação
         </div>
-        <div style={{ display: 'flex', gap: 16 }}>
-          {HOSPITALS.map((h) => (
-            <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: HOSP_COLORS[h], display: 'inline-block' }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{h}</span>
-            </div>
-          ))}
-        </div>
+        <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{header}</div>
       </div>
 
       {/* Cabeçalho de dias da semana */}
