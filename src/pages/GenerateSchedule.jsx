@@ -9,6 +9,7 @@ import {
 } from '../utils/dateHelpers'
 import { generateSchedule, computeStats } from '../utils/scheduleAlgorithm'
 import BalanceBars from '../components/BalanceBars'
+import MonWedTable from '../components/MonWedTable'
 import { Wand2, Save, CheckCircle, AlertTriangle, Calendar } from 'lucide-react'
 
 export default function GenerateSchedule() {
@@ -261,6 +262,20 @@ export default function GenerateSchedule() {
             <div className="card">
               <h2 className="font-semibold text-gray-800 mb-4">Balanceamento ao Vivo</h2>
               <BalanceBars stats={liveStats} pathMap={pathMap} />
+            </div>
+
+            <div className="card">
+              <h2 className="font-semibold text-gray-800 mb-1">Segundas e Quartas</h2>
+              <p className="text-xs text-gray-500 mb-3">
+                Seg e Qua já escaladas neste mês, por hospital. Atualiza ao editar.
+              </p>
+              <MonWedTable
+                stats={liveStats}
+                paths={pathologists
+                  .filter((p) => p.regime === 'normal' && p.active !== false)
+                  .sort((a, b) => a.name.localeCompare(b.name))}
+                compact
+              />
             </div>
 
             {Object.keys(weekendAssignments).length > 0 && (

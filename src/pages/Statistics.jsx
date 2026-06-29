@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
 import { HOSPITALS } from '../utils/dateHelpers'
+import { computeStats } from '../utils/scheduleAlgorithm'
+import MonWedTable from '../components/MonWedTable'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
-import { BarChart2 } from 'lucide-react'
+import { BarChart2, CalendarDays } from 'lucide-react'
 
 export default function Statistics() {
   const [pathologists, setPathologists] = useState([])
@@ -18,31 +20,50 @@ export default function Statistics() {
     async function load() {
       setLoading(true)
       try {
-        const [pathSnap, statsSnap] = await Promise.all([
+        // Recalcula a partir das escalas publicadas (não do cache em `statistics`),
+        // para que a segmentação Seg/Qua apareça em todo o histórico sem republicar.
+        const [pathSnap, schedSnap, holSnap] = await Promise.all([
           getDocs(collection(db, 'pathologists')),
-          getDocs(collection(db, 'statistics')),
+          getDocs(collection(db, 'schedules')),
+          getDocs(collection(db, 'holidays')),
         ])
 
         const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
         setPathologists(paths)
+
+        const holidays = holSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
         const now = new Date()
         const currentYear = now.getFullYear()
         const currentMonth = now.getMonth() + 1
 
         const agg = {}
-        for (const sd of statsSnap.docs) {
-          const { year: y, month: m, shifts = {} } = sd.data()
+        for (const sd of schedSnap.docs) {
+          const data = sd.data()
+          const days = data.days
+          if (!days) continue
+          // year/month do doc, com fallback para o id 'YYYY-MM'
+          const [idY, idM] = sd.id.split('-').map(Number)
+          const y = data.year ?? idY
+          const m = data.month ?? idM
           if (hideFuture && (y > currentYear || (y === currentYear && m > currentMonth))) continue
-          for (const [pathId, data] of Object.entries(shifts)) {
+
+          const stats = computeStats(days, paths, holidays)
+          for (const [pathId, s] of Object.entries(stats)) {
             if (!agg[pathId]) {
-              agg[pathId] = { HAC: { weekday: 0, holiday: 0 }, HOBRA: { weekday: 0, holiday: 0 }, fifthWeekend: 0 }
+              agg[pathId] = {
+                HAC: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
+                HOBRA: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
+                fifthWeekend: 0,
+              }
             }
             for (const h of HOSPITALS) {
-              agg[pathId][h].weekday += data[h]?.weekday || 0
-              agg[pathId][h].holiday += data[h]?.holiday || 0
+              agg[pathId][h].weekday += s[h]?.weekday || 0
+              agg[pathId][h].holiday += s[h]?.holiday || 0
+              agg[pathId][h].mon += s[h]?.mon || 0
+              agg[pathId][h].wed += s[h]?.wed || 0
             }
-            agg[pathId].fifthWeekend += data.fifthWeekend || 0
+            agg[pathId].fifthWeekend += s.fifthWeekend || 0
           }
         }
         setAllStats(agg)
@@ -176,6 +197,17 @@ export default function Statistics() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <h2 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
+          <CalendarDays size={18} className="text-blue-600" />
+          Segundas e Quartas por Patologista
+        </h2>
+        <p className="text-gray-500 text-xs mb-4">
+          Segmentação dos plantões Seg-Qui — quantas segundas e quartas cada um pegou, por hospital (não inclui feriados).
+        </p>
+        <MonWedTable stats={allStats} paths={normalPaths} />
       </div>
 
       {normalPaths.length > 0 && (

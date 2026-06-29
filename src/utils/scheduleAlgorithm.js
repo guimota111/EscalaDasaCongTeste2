@@ -291,8 +291,8 @@ export function computeStats(scheduleDays, pathologists, holidays) {
   function ensure(pathId) {
     if (!stats[pathId]) {
       stats[pathId] = {
-        HAC: { weekday: 0, holiday: 0 },
-        HOBRA: { weekday: 0, holiday: 0 },
+        HAC: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
+        HOBRA: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
         fifthWeekend: 0,
       }
     }
@@ -324,6 +324,9 @@ export function computeStats(scheduleDays, pathologists, holidays) {
         stats[pathId][hospital].holiday++
       } else if (isWeekday) {
         stats[pathId][hospital].weekday++
+        // Segmentação Seg-Qui: contar segundas (dow 1) e quartas (dow 3) separadamente
+        if (dow === 1) stats[pathId][hospital].mon++
+        else if (dow === 3) stats[pathId][hospital].wed++
       }
 
       // Count 5th weekend once per pathologist per hospital (not once per day)
