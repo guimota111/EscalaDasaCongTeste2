@@ -22,7 +22,7 @@ const navItems = [
   { to: '/estatisticas', label: 'Estatísticas', icon: BarChart2 },
   { to: '/feriados', label: 'Feriados', icon: CalendarDays },
   { to: '/gerar-escala', label: 'Gerar Escala', icon: Wand2 },
-  { to: '/escalas-anteriores', label: 'Escalas Anteriores', icon: Archive },
+  { to: '/escalas-anteriores', label: 'Todas as Escalas', icon: Archive },
   { to: '/ferias', label: 'Férias', icon: Palmtree },
 ]
 
