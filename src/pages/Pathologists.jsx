@@ -7,6 +7,7 @@ import { useCollection } from '../hooks/useCollection'
 import {
   REGIME_LABELS, WEEKDAY_FULL, HOSPITALS, tsToDateStr, getWeekendSlots
 } from '../utils/dateHelpers'
+import { PATHOLOGIST_COLORS, pathColor } from '../utils/colors'
 import {
   UserPlus, Edit2, Trash2, PowerOff, CalendarPlus, X, Check, ChevronDown, ChevronUp, Pencil
 } from 'lucide-react'
@@ -19,7 +20,7 @@ const ALL_WEEKEND_SLOTS = [
 ]
 
 function emptyForm() {
-  return { name: '', regime: 'normal', weekendSlots: [1], fixedDays: [] }
+  return { name: '', regime: 'normal', weekendSlots: [1], fixedDays: [], color: '' }
 }
 
 export default function Pathologists() {
@@ -51,6 +52,7 @@ export default function Pathologists() {
       regime: p.regime || 'normal',
       weekendSlots: getWeekendSlots(p).length ? getWeekendSlots(p) : [1],
       fixedDays: p.fixedDays || [],
+      color: p.color || '',
     })
     setShowForm(true)
   }
@@ -75,6 +77,7 @@ export default function Pathologists() {
         regime: form.regime,
         weekendSlots: form.weekendSlots,
         fixedDays: form.regime === 'fixed' ? form.fixedDays : [],
+        color: form.color || '',
         active: true,
       }
       if (editId) {
@@ -181,6 +184,11 @@ export default function Pathologists() {
                 <div className="flex items-center px-4 py-3 gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: pathColor(p) }}
+                        title="Cor do card"
+                      />
                       <span className="font-semibold text-gray-900">{p.name}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         p.regime === 'normal' ? 'bg-blue-100 text-blue-700' :
@@ -307,6 +315,34 @@ export default function Pathologists() {
                 autoFocus
               />
             </div>
+            <div>
+              <label className="label">Cor do card (na escala exportada)</label>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {PATHOLOGIST_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, color: c }))}
+                    className={`w-7 h-7 rounded-full transition-transform ${
+                      form.color === c ? 'ring-2 ring-offset-2 ring-gray-800 scale-110' : 'hover:scale-110'
+                    }`}
+                    style={{ backgroundColor: c }}
+                    title={c}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, color: '' }))}
+                  className={`px-2 h-7 rounded-full text-xs border transition-colors ${
+                    !form.color ? 'border-gray-800 text-gray-800 font-medium' : 'border-gray-300 text-gray-400 hover:border-gray-400'
+                  }`}
+                  title="Cor automática"
+                >
+                  Auto
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="label">Regime</label>
               <select

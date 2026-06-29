@@ -5,7 +5,8 @@ import { db } from '../firebase'
 import { formatMonthYear } from '../utils/dateHelpers'
 import MonthCalendar from '../components/MonthCalendar'
 import BalanceTable from '../components/BalanceTable'
-import { ArrowLeft, CalendarDays, TrendingUp } from 'lucide-react'
+import ExportScheduleModal from '../components/ExportScheduleModal'
+import { ArrowLeft, CalendarDays, TrendingUp, Image as ImageIcon } from 'lucide-react'
 
 export default function ScheduleDetail() {
   const { yearMonth } = useParams()
@@ -13,6 +14,7 @@ export default function ScheduleDetail() {
   const [stats, setStats] = useState(null)
   const [pathMap, setPathMap] = useState({})
   const [loading, setLoading] = useState(true)
+  const [showExport, setShowExport] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -23,7 +25,7 @@ export default function ScheduleDetail() {
       ])
 
       const map = {}
-      pathSnap.docs.forEach((d) => (map[d.id] = d.data()))
+      pathSnap.docs.forEach((d) => (map[d.id] = { id: d.id, ...d.data() }))
       setPathMap(map)
 
       if (schedSnap.exists()) setSchedule(schedSnap.data())
@@ -41,12 +43,18 @@ export default function ScheduleDetail() {
         <Link to="/escalas-anteriores" className="text-gray-400 hover:text-blue-600 transition-colors">
           <ArrowLeft size={20} />
         </Link>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">
             {year && month ? formatMonthYear(year, month) : yearMonth}
           </h1>
           <p className="text-gray-500 text-sm">Escala publicada</p>
         </div>
+        {schedule && (
+          <button className="btn-primary" onClick={() => setShowExport(true)}>
+            <ImageIcon size={16} />
+            Exportar imagem
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -79,6 +87,28 @@ export default function ScheduleDetail() {
           </div>
         </div>
       )}
+
+      {showExport && schedule && (() => {
+        // Combina os dias do mês com os dias extras (antecipação do próximo mês)
+        const combined = { ...(schedule.days || {}), ...(schedule.extraDays || {}) }
+        const keys = Object.keys(combined).sort()
+        const lastDom = new Date(year, month, 0).getDate()
+        const monthStart = `${yearMonth}-01`
+        const monthEnd = `${yearMonth}-${String(lastDom).padStart(2, '0')}`
+        const minDate = keys[0] || monthStart
+        const maxDate = keys[keys.length - 1] || monthEnd
+        return (
+          <ExportScheduleModal
+            scheduleDays={combined}
+            pathMap={pathMap}
+            minDate={minDate}
+            maxDate={maxDate}
+            defaultStart={monthStart}
+            defaultEnd={monthEnd}
+            onClose={() => setShowExport(false)}
+          />
+        )
+      })()}
     </div>
   )
 }
