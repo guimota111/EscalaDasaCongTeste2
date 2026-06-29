@@ -68,7 +68,7 @@ export default function ReportImage({ mode, year, month, perPath = [], monthly =
         <Stat label="Total de plantões" value={summary.totalShifts ?? 0} />
         <Stat label="Patologistas escalados" value={summary.numPaths ?? 0} />
         {mode === 'annual' && (
-          <Stat label="Média por mês" value={summary.avgPerMonth ?? 0} />
+          <Stat label="Média por patologista/mês" value={summary.avgPerPathMonth ?? 0} />
         )}
       </div>
 
@@ -89,13 +89,13 @@ export default function ReportImage({ mode, year, month, perPath = [], monthly =
           </ChartCard>
 
           {mode === 'annual' && (
-            <ChartCard heading="Plantões por mês">
+            <ChartCard heading="Média de plantões por patologista por mês">
               <BarChart width={CHART_W} height={CHART_H} data={monthly} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" {...axisProps} />
-                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Bar dataKey="total" fill="#3b82f6" isAnimationActive={false} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="avg" fill="#3b82f6" isAnimationActive={false} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ChartCard>
           )}

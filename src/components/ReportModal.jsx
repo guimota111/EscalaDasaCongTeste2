@@ -19,6 +19,8 @@ export default function ReportModal({ mode, onClose }) {
   const [holidays, setHolidays] = useState([])
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
+  const [includeInactive, setIncludeInactive] = useState(false)
+  const [allRegimes, setAllRegimes] = useState(false)
   const [status, setStatus] = useState('idle')
   const [busy, setBusy] = useState(false)
   const nodeRef = useRef(null)
@@ -55,8 +57,16 @@ export default function ReportModal({ mode, onClose }) {
   }, [schedules, now])
 
   const report = useMemo(() => {
+    // Filtro de quais patologistas entram no relatório
+    const includePath = (p) => {
+      if (!p) return false
+      if (!allRegimes && p.regime !== 'normal') return false
+      if (!includeInactive && p.active === false) return false
+      return true
+    }
+
     const agg = {}
-    const monthlyTotals = {}
+    const monthAgg = {} // m -> { total, paths: Set }
     for (const s of schedules) {
       if (!s.days) continue
       const y = s.year ?? Number(String(s.id).slice(0, 4))
@@ -65,6 +75,7 @@ export default function ReportModal({ mode, onClose }) {
       if (mode === 'monthly' && m !== month) continue
       const stats = computeStats(s.days, pathologists, holidays)
       for (const [pid, st] of Object.entries(stats)) {
+        if (!includePath(pathById[pid])) continue
         const segQuiHAC = st.HAC?.weekday || 0
         const segQuiHOBRA = st.HOBRA?.weekday || 0
         const feriados = (st.HAC?.holiday || 0) + (st.HOBRA?.holiday || 0)
@@ -78,7 +89,11 @@ export default function ReportModal({ mode, onClose }) {
         agg[pid].mon += mon
         agg[pid].wed += wed
         agg[pid].total += total
-        monthlyTotals[m] = (monthlyTotals[m] || 0) + total
+        if (total > 0) {
+          if (!monthAgg[m]) monthAgg[m] = { total: 0, paths: new Set() }
+          monthAgg[m].total += total
+          monthAgg[m].paths.add(pid)
+        }
       }
     }
 
@@ -92,12 +107,17 @@ export default function ReportModal({ mode, onClose }) {
       }))
 
     const totalShifts = perPath.reduce((s, p) => s + p.total, 0)
-    const monthsWithData = Object.values(monthlyTotals).filter((t) => t > 0).length
-    const monthly = MONTH_NAMES.map((nm, i) => ({
-      month: i + 1,
-      name: nm.slice(0, 3),
-      total: monthlyTotals[i + 1] || 0,
-    }))
+    const monthsWithData = Object.keys(monthAgg).length
+    // Média de plantões por patologista, em cada mês
+    const monthly = MONTH_NAMES.map((nm, i) => {
+      const ma = monthAgg[i + 1]
+      const avg = ma && ma.paths.size ? Math.round((ma.total / ma.paths.size) * 10) / 10 : 0
+      return { month: i + 1, name: nm.slice(0, 3), avg }
+    })
+    // Média geral de plantões por patologista por mês (para o resumo)
+    const avgPerPathMonth = (monthsWithData && perPath.length)
+      ? Math.round((totalShifts / perPath.length / monthsWithData) * 10) / 10
+      : 0
 
     return {
       perPath,
@@ -105,10 +125,10 @@ export default function ReportModal({ mode, onClose }) {
       summary: {
         totalShifts,
         numPaths: perPath.length,
-        avgPerMonth: monthsWithData ? Math.round(totalShifts / monthsWithData) : 0,
+        avgPerPathMonth,
       },
     }
-  }, [schedules, pathologists, holidays, year, month, mode, pathById])
+  }, [schedules, pathologists, holidays, year, month, mode, pathById, includeInactive, allRegimes])
 
   async function handleCopy() {
     if (busy) return
@@ -174,6 +194,18 @@ export default function ReportModal({ mode, onClose }) {
                     {years.map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
+                <div className="flex flex-col gap-1.5 pb-1">
+                  <Toggle
+                    checked={includeInactive}
+                    onChange={() => { setIncludeInactive((v) => !v); setStatus('idle') }}
+                    label="Incluir desligados"
+                  />
+                  <Toggle
+                    checked={allRegimes}
+                    onChange={() => { setAllRegimes((v) => !v); setStatus('idle') }}
+                    label="Incluir todos os regimes"
+                  />
+                </div>
                 <div className="flex items-center gap-2 ml-auto">
                   <button className="btn-secondary" onClick={handleDownload} disabled={busy}>
                     <Download size={16} />
@@ -214,5 +246,19 @@ export default function ReportModal({ mode, onClose }) {
         )}
       </div>
     </div>
+  )
+}
+
+function Toggle({ checked, onChange, label }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <button
+        type="button" role="switch" aria-checked={checked} onClick={onChange}
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-300'}`}
+      >
+        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
+      </button>
+      <span className="text-xs text-gray-600">{label}</span>
+    </label>
   )
 }
