@@ -7,7 +7,7 @@ import { useCollection } from '../hooks/useCollection'
 import {
   REGIME_LABELS, WEEKDAY_FULL, HOSPITALS, tsToDateStr, getWeekendSlots
 } from '../utils/dateHelpers'
-import { PATHOLOGIST_COLORS, pathColor } from '../utils/colors'
+import { PATHOLOGIST_COLORS, pathColor, getContrastText } from '../utils/colors'
 import {
   UserPlus, Edit2, Trash2, PowerOff, CalendarPlus, X, Check, ChevronDown, ChevronUp, Pencil
 } from 'lucide-react'
@@ -72,12 +72,14 @@ export default function Pathologists() {
     if (!form.name.trim()) return
     setSaving(true)
     try {
+      // Mantém apenas hex válido (3 ou 6 dígitos); caso contrário, "Auto"
+      const validHex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(form.color)
       const data = {
         name: form.name.trim(),
         regime: form.regime,
         weekendSlots: form.weekendSlots,
         fixedDays: form.regime === 'fixed' ? form.fixedDays : [],
-        color: form.color || '',
+        color: validHex ? form.color : '',
         active: true,
       }
       if (editId) {
@@ -324,7 +326,7 @@ export default function Pathologists() {
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, color: c }))}
                     className={`w-7 h-7 rounded-full transition-transform ${
-                      form.color === c ? 'ring-2 ring-offset-2 ring-gray-800 scale-110' : 'hover:scale-110'
+                      form.color.toLowerCase() === c ? 'ring-2 ring-offset-2 ring-gray-800 scale-110' : 'hover:scale-110'
                     }`}
                     style={{ backgroundColor: c }}
                     title={c}
@@ -341,6 +343,40 @@ export default function Pathologists() {
                   Auto
                 </button>
               </div>
+
+              {/* Cor personalizada (seletor RGB/hex) */}
+              <div className="flex items-center gap-3 mt-3">
+                <input
+                  type="color"
+                  value={/^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#3b82f6'}
+                  onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
+                  className="h-9 w-12 rounded border border-gray-300 cursor-pointer bg-white p-0.5"
+                  title="Escolher cor (RGB)"
+                />
+                <input
+                  type="text"
+                  value={form.color}
+                  placeholder="#3b82f6"
+                  onChange={(e) => {
+                    let v = e.target.value.trim()
+                    if (v && !v.startsWith('#')) v = '#' + v
+                    setForm((f) => ({ ...f, color: v }))
+                  }}
+                  className="input w-32 font-mono text-sm"
+                />
+                <span
+                  className="px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: pathColor({ color: form.color, name: form.name, id: editId || form.name }),
+                    color: getContrastText(pathColor({ color: form.color, name: form.name, id: editId || form.name })),
+                  }}
+                >
+                  {form.name?.trim() ? form.name.trim().split(' ')[0] : 'Prévia'}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Use a paleta acima, o seletor de cor (RGB) ou digite o código hex. "Auto" gera uma cor automática.
+              </p>
             </div>
 
             <div>
