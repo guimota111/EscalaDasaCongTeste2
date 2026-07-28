@@ -14,6 +14,7 @@ import {
   X,
   Microscope,
   Palmtree,
+  Dices,
 } from 'lucide-react'
 
 const navItems = [
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/gerar-escala', label: 'Gerar Escala', icon: Wand2 },
   { to: '/escalas-anteriores', label: 'Todas as Escalas', icon: Archive },
   { to: '/ferias', label: 'Férias', icon: Palmtree },
+  { to: '/sorteios', label: 'Sorteios', icon: Dices },
 ]
 
 export default function Layout({ user }) {

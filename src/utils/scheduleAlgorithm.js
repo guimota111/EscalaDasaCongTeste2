@@ -6,19 +6,28 @@ import {
   getWeekendSlots,
   HOSPITALS,
 } from './dateHelpers'
+import { isRestricted } from './restrictions'
 
 /**
- * Generate a schedule for a given month.
+ * Monta o esqueleto da escala de um mês.
  *
- * Weekend: entire Fri+Sat+Sun block → same person per hospital.
- * Weekdays (Mon-Thu): Normal-regime only. Each day HAC and HOBRA get
- * different people. Balance by fewest-at-that-hospital first, then fewest-total.
- * Avoid consecutive days when possible.
+ * A divisão da rotina (Seg-Qui) NÃO é feita automaticamente: esses dias saem
+ * em branco para o usuário preencher manualmente no calendário. O gerador
+ * preenche apenas o que é determinado por regra:
+ *
+ *   - dias já divididos na antecipação do mês anterior (lockedDays);
+ *   - patologistas de Plantão Fixo nos seus dias fixos;
+ *   - blocos de final de semana (Sex+Sáb+Dom) conforme o slot de cada um.
  */
-export function generateSchedule(
-  year, month, pathologists, existingStats, holidays,
-  prevMonthWeekendAssignments = {}, lockedDays = {}
-) {
+export function generateSchedule({
+  year,
+  month,
+  pathologists = [],
+  existingStats = {},
+  prevWeekendAssignments = {},
+  lockedDays = {},
+  restrictions = [],
+}) {
   const days = buildMonthDays(year, month)
   const weekendGroups = getMonthWeekendGroups(year, month)
 
@@ -27,10 +36,11 @@ export function generateSchedule(
   function isAvailable(p, dateStr) {
     if (p.active === false) return false
     if (isOnVacation(p, dateStr)) return false
+    if (isRestricted(restrictions, p.id, dateStr)) return false
     return true
   }
 
-  // Per-hospital shift counters seeded from historical stats
+  // Contadores por hospital, semeados com o histórico (desempate dos FDS)
   const shiftCount = {} // { pathId: { HAC: n, HOBRA: n } }
   for (const p of active) {
     const s = existingStats?.[p.id] || {}
@@ -40,54 +50,30 @@ export function generateSchedule(
     }
   }
 
-  function totalShifts(pathId) {
-    return (shiftCount[pathId]?.HAC || 0) + (shiftCount[pathId]?.HOBRA || 0)
-  }
-
   const result = {}
   for (const { dateStr } of days) result[dateStr] = { HAC: null, HOBRA: null }
-
-  // Last date each pathologist was assigned (to avoid back-to-back days)
-  const lastAssigned = {} // pathId → 'YYYY-MM-DD'
-
-  function wasAssignedOnDate(pathId, dateStr) {
-    return lastAssigned[pathId] === dateStr
-  }
-
-  function wasAssignedYesterday(pathId, dateStr) {
-    if (!lastAssigned[pathId]) return false
-    const d1 = new Date(lastAssigned[pathId] + 'T00:00:00Z')
-    const d2 = new Date(dateStr + 'T00:00:00Z')
-    return (d2 - d1) === 86400000
-  }
 
   function assign(dateStr, hospital, pathId) {
     result[dateStr][hospital] = pathId
     if (!shiftCount[pathId]) shiftCount[pathId] = { HAC: 0, HOBRA: 0 }
     shiftCount[pathId][hospital]++
-    lastAssigned[pathId] = dateStr
   }
 
   // --------------------------------------------------------------------------
-  // STEP 0: Pre-divided days carried over from the previous month's generation.
-  // These belong to THIS month (e.g. the user added the first days of this
-  // month while dividing the previous one) and must be honored exactly.
-  // Seeded first so all later steps skip them via the `if (result[...]) continue`
-  // guards, and so fixed/weekend assignments never overwrite a manual division.
+  // ETAPA 0: dias já divididos durante a geração do mês anterior.
+  // Pertencem a ESTE mês e devem ser honrados exatamente como ficaram.
+  // Semeados primeiro para que nada os sobrescreva.
   // --------------------------------------------------------------------------
-  const lockedSet = new Set()
   for (const [dateStr, slot] of Object.entries(lockedDays || {})) {
-    if (!result[dateStr]) continue // only days that fall inside this month
-    let any = false
+    if (!result[dateStr]) continue // só dias que caem dentro deste mês
     for (const hospital of HOSPITALS) {
       const pathId = slot?.[hospital]
-      if (pathId) { assign(dateStr, hospital, pathId); any = true }
+      if (pathId) assign(dateStr, hospital, pathId)
     }
-    if (any) lockedSet.add(dateStr)
   }
 
   // --------------------------------------------------------------------------
-  // STEP 1: Fixed-regime pathologists
+  // ETAPA 1: patologistas de Plantão Fixo
   // --------------------------------------------------------------------------
   const fixedPaths = active.filter((p) => p.regime === 'fixed')
   for (const { dateStr, dow } of days) {
@@ -102,7 +88,7 @@ export function generateSchedule(
   }
 
   // --------------------------------------------------------------------------
-  // STEP 2: Weekend blocks (Fri+Sat+Sun → same person per hospital per slot)
+  // ETAPA 2: blocos de final de semana (Sex+Sáb+Dom → mesma pessoa por hospital)
   // --------------------------------------------------------------------------
   const slotGroups = {}
   for (const p of active) {
@@ -121,7 +107,7 @@ export function generateSchedule(
     const refDate = friday ? friday.dateStr : slotDays[0]?.dateStr
     const available = group.filter((p) => isAvailable(p, refDate))
 
-    const prev = prevMonthWeekendAssignments?.[slot] || {}
+    const prev = prevWeekendAssignments?.[slot] || {}
     const ordered = [...available].sort((a, b) => a.name.localeCompare(b.name))
 
     let hacPerson = null
@@ -139,7 +125,7 @@ export function generateSchedule(
         hacPerson = ordered[0]; hobraPerson = ordered[1]
       }
     } else {
-      // 3+ people: rotate HOBRA→HAC→folga
+      // 3+ pessoas: rotaciona HOBRA→HAC→folga
       const prevHOBRAIdx = ordered.findIndex((p) => p.id === prev.HOBRA)
       const prevHACIdx = ordered.findIndex((p) => p.id === prev.HAC)
       if (prevHOBRAIdx >= 0) {
@@ -149,7 +135,7 @@ export function generateSchedule(
         hacPerson = ordered[hacIdx]
         hobraPerson = hobraIdx >= 0 ? ordered[hobraIdx] : ordered[(hacIdx + 1) % ordered.length]
       } else {
-        // No history — assign by fewest hospital shifts
+        // Sem histórico — atribui por menor número de plantões no hospital
         const sortedByHAC = [...ordered].sort((a, b) =>
           (shiftCount[a.id]?.HAC || 0) - (shiftCount[b.id]?.HAC || 0)
         )
@@ -177,132 +163,49 @@ export function generateSchedule(
     }
   }
 
-  // --------------------------------------------------------------------------
-  // STEP 3: Weekdays Mon-Thu — Normal regime, score-based fair distribution
-  //
-  // Goals (in priority order):
-  //   1. Every available pathologist gets at least 1 shift
-  //   2. Total shifts (HAC+HOBRA) as equal as possible across pathologists
-  //   3. HAC and HOBRA counts balanced per pathologist
-  //   4. Avoid consecutive days
-  // --------------------------------------------------------------------------
-  const normalPaths = active.filter((p) => p.regime === 'normal')
-  const weekdayDates = days.filter((d) => d.isWeekday)
-
-  // Per-month shift counters (separate from historical, for within-month balance)
-  const monthCount = {} // { pathId: { HAC: n, HOBRA: n } }
-  for (const p of normalPaths) monthCount[p.id] = { HAC: 0, HOBRA: 0 }
-
-  // Account for pre-divided (locked) weekday assignments already placed in STEP 0
-  // so within-month balance treats them as real shifts already taken.
-  for (const { dateStr, isWeekday } of days) {
-    if (!isWeekday) continue
-    for (const hospital of HOSPITALS) {
-      const pid = result[dateStr][hospital]
-      if (pid && monthCount[pid]) monthCount[pid][hospital]++
-    }
-  }
-
-  function monthTotal(pathId) {
-    return (monthCount[pathId]?.HAC || 0) + (monthCount[pathId]?.HOBRA || 0)
-  }
-
-  // Count how many weekdays each pathologist is available this month
-  const availableDays = {}
-  for (const p of normalPaths) {
-    availableDays[p.id] = weekdayDates.filter((d) => isAvailable(p, d.dateStr)).length
-  }
-
-  // Target shifts per pathologist this month, proportional to availability.
-  // Total slots = weekdayDates.length * 2 (one HAC + one HOBRA per day).
-  const totalSlots = weekdayDates.length * 2
-  const totalAvailDays = normalPaths.reduce((s, p) => s + availableDays[p.id], 0)
-
-  function targetTotal(pathId) {
-    if (!totalAvailDays) return 0
-    return (totalSlots * availableDays[pathId]) / totalAvailDays
-  }
-
-  function targetPerHospital(pathId) {
-    return targetTotal(pathId) / 2
-  }
-
-  // Score: higher = more urgently needs a shift at this hospital.
-  // Uses monthly counts as primary signal; consecutive-day penalty.
-  function score(p, hospital, dateStr) {
-    const totalNeed = targetTotal(p.id) - monthTotal(p.id)        // main fairness
-    const hospNeed = targetPerHospital(p.id) - (monthCount[p.id]?.[hospital] || 0) // HAC/HOBRA balance
-    const histPenalty = totalShifts(p.id) * 0.1                   // slight penalty for historical surplus
-    const consecPenalty = wasAssignedYesterday(p.id, dateStr) ? 15 : 0 // avoid back-to-back
-    return totalNeed * 10 + hospNeed * 5 - histPenalty - consecPenalty
-  }
-
-  function assignWeekday(dateStr, hospital, pathId) {
-    assign(dateStr, hospital, pathId)
-    monthCount[pathId][hospital]++
-  }
-
-  for (const { dateStr, isWeekday } of days) {
-    if (!isWeekday) continue
-
-    const todayAssigned = new Set(
-      HOSPITALS.map((h) => result[dateStr][h]).filter(Boolean)
-    )
-
-    for (const hospital of HOSPITALS) {
-      if (result[dateStr][hospital]) continue
-
-      const pool = normalPaths.filter(
-        (p) => isAvailable(p, dateStr) && !todayAssigned.has(p.id)
-      )
-      if (!pool.length) continue
-
-      // Pick highest-score candidate (soft constraint on consecutive days via penalty)
-      pool.sort((a, b) => score(b, hospital, dateStr) - score(a, hospital, dateStr))
-
-      const chosen = pool[0]
-      assignWeekday(dateStr, hospital, chosen.id)
-      todayAssigned.add(chosen.id)
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // STEP 4: Guarantee no zeros — if an available pathologist has 0 shifts,
-  // swap them in on a day where the most-loaded pathologist has ≥ 2 shifts.
-  // --------------------------------------------------------------------------
-  for (const p of normalPaths) {
-    if (monthTotal(p.id) > 0) continue
-    // Find days this pathologist is available
-    const candidateDays = weekdayDates.filter((d) => isAvailable(p, d.dateStr))
-    if (!candidateDays.length) continue
-
-    for (const hospital of HOSPITALS) {
-      // Find a day where someone else has many shifts and p is free
-      let bestDay = null
-      let bestScore = -Infinity
-      for (const { dateStr } of candidateDays) {
-        if (lockedSet.has(dateStr)) continue // never displace a pre-divided day
-        const current = result[dateStr][hospital]
-        if (!current || current === p.id) continue
-        const currentLoad = monthTotal(current)
-        if (currentLoad > 1 && currentLoad > bestScore) {
-          bestScore = currentLoad
-          bestDay = { dateStr, displaced: current }
-        }
-      }
-      if (bestDay) {
-        // Swap: remove displaced from this slot, put p in
-        monthCount[bestDay.displaced][hospital]--
-        result[bestDay.dateStr][hospital] = p.id
-        shiftCount[p.id] = shiftCount[p.id] || { HAC: 0, HOBRA: 0 }
-        shiftCount[p.id][hospital]++
-        monthCount[p.id][hospital]++
-        break
-      }
-    }
-  }
-
   return { schedule: result, weekendAssignments }
+}
+
+/** Entrada zerada de estatística, com a mesma forma usada em todo o app. */
+export function emptyStatEntry() {
+  return {
+    HAC: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
+    HOBRA: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
+    fifthWeekend: 0,
+  }
+}
+
+/**
+ * Soma vários mapas de estatísticas ({ [pathId]: statEntry }) em um só.
+ * Usado pelo balanceamento "Total" (mês em edição + histórico publicado).
+ */
+export function mergeStatsMaps(...maps) {
+  const out = {}
+  for (const map of maps) {
+    for (const [pathId, s] of Object.entries(map || {})) {
+      if (!out[pathId]) out[pathId] = emptyStatEntry()
+      for (const h of HOSPITALS) {
+        out[pathId][h].weekday += s?.[h]?.weekday || 0
+        out[pathId][h].holiday += s?.[h]?.holiday || 0
+        out[pathId][h].mon += s?.[h]?.mon || 0
+        out[pathId][h].wed += s?.[h]?.wed || 0
+      }
+      out[pathId].fifthWeekend += s?.fifthWeekend || 0
+    }
+  }
+  return out
+}
+
+/**
+ * Dias em que a mesma pessoa aparece nos dois hospitais.
+ * Retorna um Set de 'YYYY-MM-DD'.
+ */
+export function findDoubleBookedDates(scheduleDays = {}) {
+  const conflicts = new Set()
+  for (const [dateStr, slot] of Object.entries(scheduleDays)) {
+    if (slot?.HAC && slot.HAC === slot.HOBRA) conflicts.add(dateStr)
+  }
+  return conflicts
 }
 
 /**
@@ -318,13 +221,7 @@ export function computeStats(scheduleDays, pathologists, holidays) {
   const stats = {}
 
   function ensure(pathId) {
-    if (!stats[pathId]) {
-      stats[pathId] = {
-        HAC: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
-        HOBRA: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
-        fifthWeekend: 0,
-      }
-    }
+    if (!stats[pathId]) stats[pathId] = emptyStatEntry()
   }
 
   // Find which dates belong to the 5th weekend of their month

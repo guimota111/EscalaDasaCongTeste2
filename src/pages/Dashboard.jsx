@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { doc, getDoc, setDoc, getDocs, collection, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { useCollection } from '../hooks/useCollection'
 import { scheduleKey, formatMonthYear, MONTH_NAMES } from '../utils/dateHelpers'
 import { computeStats } from '../utils/scheduleAlgorithm'
+import { makeUnavailabilityChecker } from '../utils/restrictions'
 import MonthCalendar from '../components/MonthCalendar'
 import ExportScheduleModal from '../components/ExportScheduleModal'
 import { CalendarDays, TrendingUp, Edit2, Save, X, Image as ImageIcon } from 'lucide-react'
@@ -23,6 +25,13 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false)
   const [editedDays, setEditedDays] = useState(null) // local edits before save
   const [showExport, setShowExport] = useState(false)
+
+  const { data: restrictions } = useCollection('restrictions')
+
+  const unavailableReason = useMemo(
+    () => makeUnavailabilityChecker(Object.values(pathMap), restrictions),
+    [pathMap, restrictions]
+  )
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
 
@@ -189,6 +198,7 @@ export default function Dashboard() {
               scheduleDays={displayDays}
               pathMap={pathMap}
               onEdit={editMode ? handleEdit : undefined}
+              unavailableReason={unavailableReason}
             />
           </div>
 

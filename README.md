@@ -8,8 +8,9 @@ Sistema web para organização da escala de congelação dos patologistas da DAS
 - **Patologistas** — Cadastro e gerenciamento (regimes: Normal, Final de Semana, Plantão Fixo), férias e desligamentos
 - **Estatísticas** — Contagem acumulada de plantões com gráficos
 - **Feriados** — Cadastro manual de feriados
-- **Gerar Escala** — Algoritmo automático de balanceamento com edição manual antes de publicar
+- **Gerar Escala** — Esqueleto da escala em calendário, com divisão manual da rotina
 - **Escalas Anteriores** — Histórico de todas as escalas publicadas
+- **Sorteios** — Sorteio entre patologistas para resolver disputas (não salva nada)
 
 ## Configuração
 
@@ -76,6 +77,38 @@ npm run deploy
 | Normal | Segunda a quinta + reveza finais de semana |
 | Final de Semana | Apenas finais de semana do seu slot (1º ao 4º) |
 | Plantão Fixo | Dias fixos em determinado hospital + reveza finais de semana |
+
+## Gerar Escala
+
+O gerador **não divide a rotina automaticamente**. Ao gerar, ele preenche apenas
+o que é determinado por regra e deixa o resto em branco para a divisão manual:
+
+| Preenchido ao gerar | Em branco |
+|---------------------|-----------|
+| Plantões fixos (regime Plantão Fixo) | Rotina de Seg a Qui |
+| Blocos de final de semana (Sex+Sáb+Dom, por slot) | |
+| Dias antecipados na geração do mês anterior | |
+
+A edição é feita no calendário: clique em qualquer célula HAC/HOBRA para
+escolher o patologista. O seletor mostra a contagem de plantões de cada um e
+esconde quem está indisponível naquele dia.
+
+- **Dia em vermelho** — a mesma pessoa está escalada nos dois hospitais.
+- **Balanceamento / Segundas e Quartas** — alterne entre **Mês** (só o mês em
+  edição), **Histórico** (escalas publicadas, exceto este mês) e **Total** (os dois somados).
+
+### Restrições
+
+O botão **Adicionar restrições** cadastra os dias em que um patologista não pode
+entrar na escala — uma data específica ou um período, com motivo opcional. Nesses
+dias ele deixa de ser opção no calendário. Férias e desligamentos bloqueiam da
+mesma forma.
+
+Coleção `restrictions` no Firestore:
+
+```js
+{ pathologistId: string, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', reason: string }
+```
 
 ## Lógica de Final de Semana
 

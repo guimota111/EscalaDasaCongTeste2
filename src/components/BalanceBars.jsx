@@ -6,12 +6,15 @@ import React from 'react'
  * pathMap: { [pathId]: any }
  */
 export default function BalanceBars({ stats = {}, pathMap = {} }) {
+  // Mostra todo mundo do regime Normal que está ativo — inclusive com zero
+  // plantões, já que a divisão agora é manual e quem está sem nada precisa
+  // aparecer. Desligados só entram se tiverem histórico.
   const paths = Object.entries(pathMap)
     .filter(([id, p]) => {
       if (p.regime !== 'normal') return false
+      if (p.active !== false) return true
       const s = stats[id] || {}
-      const total = (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0) + (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0)
-      return total > 0
+      return (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0) + (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0) > 0
     })
     .sort((a, b) => a[1].name.localeCompare(b[1].name))
 
