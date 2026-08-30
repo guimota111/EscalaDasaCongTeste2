@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
-import { HOSPITALS } from '../utils/dateHelpers'
-import { computeStats } from '../utils/scheduleAlgorithm'
+import {
+  computeStats, computeHolidayStats, mergeStatsMaps, balanceTotal
+} from '../utils/scheduleAlgorithm'
 import MonWedTable from '../components/MonWedTable'
 import ReportModal from '../components/ReportModal'
 import {
@@ -39,7 +40,10 @@ export default function Statistics() {
         const currentYear = now.getFullYear()
         const currentMonth = now.getMonth() + 1
 
-        const agg = {}
+        const inRange = (y, m) =>
+          !hideFuture || !(y > currentYear || (y === currentYear && m > currentMonth))
+
+        let agg = {}
         for (const sd of schedSnap.docs) {
           const data = sd.data()
           const days = data.days
@@ -48,26 +52,21 @@ export default function Statistics() {
           const [idY, idM] = sd.id.split('-').map(Number)
           const y = data.year ?? idY
           const m = data.month ?? idM
-          if (hideFuture && (y > currentYear || (y === currentYear && m > currentMonth))) continue
+          if (!inRange(y, m)) continue
 
-          const stats = computeStats(days, paths, holidays)
-          for (const [pathId, s] of Object.entries(stats)) {
-            if (!agg[pathId]) {
-              agg[pathId] = {
-                HAC: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
-                HOBRA: { weekday: 0, holiday: 0, mon: 0, wed: 0 },
-                fifthWeekend: 0,
-              }
-            }
-            for (const h of HOSPITALS) {
-              agg[pathId][h].weekday += s[h]?.weekday || 0
-              agg[pathId][h].holiday += s[h]?.holiday || 0
-              agg[pathId][h].mon += s[h]?.mon || 0
-              agg[pathId][h].wed += s[h]?.wed || 0
-            }
-            agg[pathId].fifthWeekend += s.fifthWeekend || 0
-          }
+          agg = mergeStatsMaps(agg, computeStats(days, paths, holidays))
         }
+
+        // Plantões de feriado: contabilidade manual, independente de haver
+        // escala publicada no mês.
+        agg = mergeStatsMaps(
+          agg,
+          computeHolidayStats(holidays, (dateStr) => {
+            const [y, m] = dateStr.split('-').map(Number)
+            return inRange(y, m)
+          })
+        )
+
         setAllStats(agg)
       } finally {
         setLoading(false)
@@ -76,9 +75,9 @@ export default function Statistics() {
     load()
   }, [hideFuture])
 
+  // Total de balanceamento: feriados não entram (contabilidade manual).
   function getTotal(pathId) {
-    const s = allStats[pathId] || {}
-    return (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0) + (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0)
+    return balanceTotal(allStats[pathId] || {})
   }
 
   const normalPaths = pathologists
@@ -168,6 +167,10 @@ export default function Statistics() {
           <BarChart2 size={18} className="text-blue-600" />
           Plantões por Patologista
         </h2>
+        <p className="text-gray-500 text-xs mb-4">
+          As colunas de feriado vêm do cadastro manual da aba Feriados e não entram no Total —
+          dias marcados como feriado ficam fora do balanceamento.
+        </p>
         {normalPaths.length === 0 ? (
           <p className="text-gray-400 text-sm">Nenhum patologista de regime Normal encontrado.</p>
         ) : (
@@ -177,9 +180,9 @@ export default function Statistics() {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-2 pr-4 font-semibold text-gray-700">Patologista</th>
                   <th className="text-center py-2 px-2 font-semibold text-gray-700">HAC<br/><span className="font-normal text-xs text-gray-500">Seg-Qui</span></th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HAC<br/><span className="font-normal text-xs text-gray-500">Feriados</span></th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-500">HAC<br/><span className="font-normal text-xs text-gray-400">Feriados</span></th>
                   <th className="text-center py-2 px-2 font-semibold text-gray-700">HOBRA<br/><span className="font-normal text-xs text-gray-500">Seg-Qui</span></th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">HOBRA<br/><span className="font-normal text-xs text-gray-500">Feriados</span></th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-500">HOBRA<br/><span className="font-normal text-xs text-gray-400">Feriados</span></th>
                   <th className="text-center py-2 px-2 font-semibold text-amber-700">5º FDS</th>
                   <th className="text-center py-2 px-2 font-semibold text-blue-700">Total</th>
                 </tr>
@@ -192,7 +195,7 @@ export default function Statistics() {
                   const hobraWd = s.HOBRA?.weekday || 0
                   const hobraHol = s.HOBRA?.holiday || 0
                   const fifth = s.fifthWeekend || 0
-                  const total = hacWd + hacHol + hobraWd + hobraHol
+                  const total = hacWd + hobraWd
                   return (
                     <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2 pr-4 text-gray-800">
@@ -200,9 +203,9 @@ export default function Statistics() {
                         {!p.active && <span className="ml-2 text-xs text-red-400">(desligado)</span>}
                       </td>
                       <td className="text-center py-2 px-2 text-gray-700">{hacWd}</td>
-                      <td className="text-center py-2 px-2 text-gray-700">{hacHol}</td>
+                      <td className="text-center py-2 px-2 text-gray-400">{hacHol}</td>
                       <td className="text-center py-2 px-2 text-gray-700">{hobraWd}</td>
-                      <td className="text-center py-2 px-2 text-gray-700">{hobraHol}</td>
+                      <td className="text-center py-2 px-2 text-gray-400">{hobraHol}</td>
                       <td className="text-center py-2 px-2 text-amber-600 font-medium">{fifth || '—'}</td>
                       <td className="text-center py-2 px-2 font-bold text-blue-700">{total}</td>
                     </tr>

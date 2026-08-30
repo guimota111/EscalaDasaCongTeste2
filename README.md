@@ -7,7 +7,7 @@ Sistema web para organização da escala de congelação dos patologistas da DAS
 - **Dashboard** — Calendário do mês atual com escala e balanceamento por patologista
 - **Patologistas** — Cadastro e gerenciamento (regimes: Normal, Final de Semana, Plantão Fixo), férias e desligamentos
 - **Estatísticas** — Contagem acumulada de plantões com gráficos
-- **Feriados** — Cadastro manual de feriados
+- **Feriados** — Cadastro manual de feriados e dos plantões de feriado por patologista/hospital
 - **Gerar Escala** — Esqueleto da escala em calendário, com divisão manual da rotina
 - **Escalas Anteriores** — Histórico de todas as escalas publicadas
 - **Sorteios** — Sorteio entre patologistas para resolver disputas (não salva nada)
@@ -108,6 +108,31 @@ Coleção `restrictions` no Firestore:
 
 ```js
 { pathologistId: string, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', reason: string }
+```
+
+## Feriados
+
+A contabilidade de feriado é **manual**:
+
+- O dia cadastrado como feriado **sai de todo balanceamento** — o plantão que
+  estiver na escala nesse dia não conta como Seg-Qui, não entra na segmentação
+  Seg/Qua e não conta 5º final de semana. No calendário ele aparece marcado
+  com o selo **Fer**.
+- Dentro da aba **Feriados**, cada feriado recebe os seus plantões: quantos
+  patologistas forem necessários em cada hospital (HAC e HOBRA). Essa é a única
+  fonte da coluna "Feriados" nas estatísticas e relatórios.
+- Os totais de balanceamento (Dashboard, Gerar Escala, Estatísticas, relatórios)
+  contam apenas os plantões Seg-Qui; a contagem de feriados é informativa e fica
+  em coluna separada.
+
+Coleção `holidays` no Firestore:
+
+```js
+{
+  date: 'YYYY-MM-DD',
+  name: string,
+  shifts: [{ pathId: string, hospital: 'HAC' | 'HOBRA' }],
+}
 ```
 
 ## Lógica de Final de Semana

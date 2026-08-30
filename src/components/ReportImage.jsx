@@ -17,6 +17,7 @@ function firstName(name = '') {
  *
  * mode: 'monthly' | 'annual'
  * perPath: [{ id, name, color, segQuiHAC, segQuiHOBRA, feriados, mon, wed, total }]
+ * `total` é o total de balanceamento (Seg-Qui); feriados são contabilizados à parte.
  * monthly: [{ month, name, total }] (somente anual)
  * summary: { totalShifts, numPaths }
  */
@@ -76,7 +77,7 @@ export default function ReportImage({ mode, year, month, perPath = [], monthly =
         <p style={{ color: '#9ca3af', marginTop: 24 }}>Sem dados para o período selecionado.</p>
       ) : (
         <>
-          <ChartCard heading="Total de plantões por patologista">
+          <ChartCard heading="Total de plantões por patologista (sem feriados)">
             <BarChart width={CHART_W} height={CHART_H} data={totalData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" {...axisProps} />

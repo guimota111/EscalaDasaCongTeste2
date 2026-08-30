@@ -37,6 +37,8 @@ export default function MonthCalendar({
   unavailableReason,
   // { [pathId]: n } — contagem exibida ao lado de cada nome no seletor
   pathCounts,
+  // Set de 'YYYY-MM-DD' marcados como feriado (fora do balanceamento)
+  holidayDates,
 }) {
   const monthDays = buildMonthDays(year, month)
   const extraDays = buildExtraDays(extraDates)
@@ -130,6 +132,11 @@ export default function MonthCalendar({
       <span className="text-xs text-gray-400">Cada card indica o hospital:</span>
       <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">HAC</span>
       <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">HOBRA</span>
+      {holidayDates?.size > 0 && (
+        <span className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
+          Feriado — fora do balanceamento
+        </span>
+      )}
       {conflictDates.size > 0 && (
         <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 font-medium flex items-center gap-1">
           <AlertTriangle size={11} />
@@ -144,9 +151,12 @@ export default function MonthCalendar({
     const slot = scheduleDays[dateStr] || {}
     const conflict = conflictDates.has(dateStr)
     const prefilled = prefilledDates?.has(dateStr)
+    const isHoliday = holidayDates?.has(dateStr)
 
     const base = conflict
       ? 'bg-red-50 border-red-400 ring-1 ring-red-300'
+      : isHoliday
+      ? 'bg-purple-50 border-purple-200'
       : isExtra
       ? 'bg-amber-50/70 border-amber-200 border-dashed'
       : isWeekend
@@ -166,6 +176,14 @@ export default function MonthCalendar({
             )}
             {prefilled && (
               <span title="Pré-dividido no mês anterior" className="text-amber-500 text-xs leading-none">↩</span>
+            )}
+            {isHoliday && (
+              <span
+                title="Feriado — não conta no balanceamento (contabilidade manual na aba Feriados)"
+                className="text-[9px] font-bold uppercase text-purple-700 bg-purple-100 rounded px-1 leading-tight"
+              >
+                Fer
+              </span>
             )}
             {isExtra && onRemoveExtraDay && (
               <button
@@ -250,12 +268,16 @@ export default function MonthCalendar({
         {allDays.map(({ dateStr, day, dow, isWeekend, isExtra, month: extraMonth }) => {
           const slot = scheduleDays[dateStr] || {}
           const conflict = conflictDates.has(dateStr)
+          const isHoliday = holidayDates?.has(dateStr)
 
           return (
             <div
               key={dateStr}
               className={`flex items-start gap-3 py-2 px-1 ${
-                conflict ? 'bg-red-50' : isExtra ? 'bg-amber-50/70' : isWeekend ? 'bg-blue-50' : ''
+                conflict ? 'bg-red-50'
+                  : isHoliday ? 'bg-purple-50'
+                  : isExtra ? 'bg-amber-50/70'
+                  : isWeekend ? 'bg-blue-50' : ''
               }`}
             >
               {/* Date badge */}
@@ -281,6 +303,11 @@ export default function MonthCalendar({
                   <span className="text-[11px] text-red-700 font-medium flex items-center gap-1">
                     <AlertTriangle size={12} />
                     Mesma pessoa nos dois hospitais
+                  </span>
+                )}
+                {isHoliday && (
+                  <span className="text-[11px] text-purple-700 font-medium">
+                    Feriado — fora do balanceamento
                   </span>
                 )}
                 {HOSPITAL_LIST.map((hospital) => {

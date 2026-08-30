@@ -9,7 +9,8 @@ import {
   formatMonthYear, hasFifthWeekend, getMonthWeekendGroups
 } from '../utils/dateHelpers'
 import {
-  generateSchedule, computeStats, mergeStatsMaps, findDoubleBookedDates
+  generateSchedule, computeMonthStats, mergeStatsMaps,
+  findDoubleBookedDates, holidayDateSet, balanceTotal
 } from '../utils/scheduleAlgorithm'
 import { makeUnavailabilityChecker } from '../utils/restrictions'
 import BalanceBars from '../components/BalanceBars'
@@ -89,7 +90,7 @@ export default function GenerateSchedule() {
           if (sd.id === currentKey) continue
           const days = sd.data().days
           if (!days) continue
-          agg = mergeStatsMaps(agg, computeStats(days, paths, hols))
+          agg = mergeStatsMaps(agg, computeMonthStats(days, paths, hols, sd.id))
         }
         setHistoryStats(agg)
 
@@ -127,7 +128,7 @@ export default function GenerateSchedule() {
     for (const [dateStr, slot] of Object.entries(schedule)) {
       if (dateStr.slice(0, 7) === prefix) monthDays[dateStr] = slot
     }
-    setLiveStats(computeStats(monthDays, pathologists, holidays))
+    setLiveStats(computeMonthStats(monthDays, pathologists, holidays, prefix))
   }, [schedule, pathologists, holidays, year, month])
 
   const totalStats = useMemo(
@@ -152,8 +153,7 @@ export default function GenerateSchedule() {
     const s = statsForScope(balanceScope)
     const out = {}
     for (const [id, v] of Object.entries(s)) {
-      out[id] = (v.HAC?.weekday || 0) + (v.HAC?.holiday || 0)
-        + (v.HOBRA?.weekday || 0) + (v.HOBRA?.holiday || 0)
+      out[id] = balanceTotal(v)
     }
     return out
   }, [balanceScope, liveStats, historyStats, totalStats])
@@ -261,7 +261,7 @@ export default function GenerateSchedule() {
         else extraDays[dateStr] = slot
       }
 
-      const stats = computeStats(days, pathologists, holidays)
+      const stats = computeMonthStats(days, pathologists, holidays, key)
 
       await setDoc(doc(db, 'schedules', key), {
         year,
@@ -284,6 +284,8 @@ export default function GenerateSchedule() {
       setPublishing(false)
     }
   }
+
+  const holidayDates = useMemo(() => holidayDateSet(holidays), [holidays])
 
   const activePaths = pathologists.filter((p) => p.active !== false)
   const fifthWeekend = schedule ? hasFifthWeekend(year, month) : false
@@ -410,6 +412,7 @@ export default function GenerateSchedule() {
               prefilledDates={prefilledDates}
               unavailableReason={unavailableReason}
               pathCounts={pathCounts}
+              holidayDates={holidayDates}
             />
 
             <div className="mt-4">

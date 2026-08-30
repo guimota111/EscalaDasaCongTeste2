@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc, getDocs, collection, Timestamp } from 'firebase/fi
 import { db } from '../firebase'
 import { useCollection } from '../hooks/useCollection'
 import { scheduleKey, formatMonthYear, MONTH_NAMES } from '../utils/dateHelpers'
-import { computeStats } from '../utils/scheduleAlgorithm'
+import { computeMonthStats, holidayDateSet } from '../utils/scheduleAlgorithm'
 import { makeUnavailabilityChecker } from '../utils/restrictions'
 import MonthCalendar from '../components/MonthCalendar'
 import ExportScheduleModal from '../components/ExportScheduleModal'
@@ -33,6 +33,8 @@ export default function Dashboard() {
     [pathMap, restrictions]
   )
 
+  const holidayDates = useMemo(() => holidayDateSet(holidays), [holidays])
+
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
 
   useEffect(() => {
@@ -41,21 +43,25 @@ export default function Dashboard() {
     async function load() {
       setLoading(true)
       try {
+        const key = scheduleKey(year, month)
         const [schedSnap, pathSnap, holSnap] = await Promise.all([
-          getDoc(doc(db, 'schedules', scheduleKey(year, month))),
+          getDoc(doc(db, 'schedules', key)),
           getDocs(collection(db, 'pathologists')),
           getDocs(collection(db, 'holidays')),
         ])
+        const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
         const map = {}
-        pathSnap.docs.forEach((d) => (map[d.id] = { id: d.id, ...d.data() }))
+        paths.forEach((p) => (map[p.id] = p))
         setPathMap(map)
-        setHolidays(holSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        const hols = holSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        setHolidays(hols)
 
         if (schedSnap.exists()) {
           const sched = schedSnap.data()
           setSchedule(sched)
-          const statsSnap = await getDoc(doc(db, 'statistics', scheduleKey(year, month)))
-          setStats(statsSnap.exists() ? statsSnap.data().shifts : {})
+          // Calculado na hora (e não do cache em `statistics`) para refletir
+          // sempre os feriados cadastrados agora.
+          setStats(computeMonthStats(sched.days || {}, paths, hols, key))
         } else {
           setSchedule(null)
           setStats(null)
@@ -84,7 +90,7 @@ export default function Dashboard() {
       const key = scheduleKey(year, month)
       const pathsSnap = await getDocs(collection(db, 'pathologists'))
       const paths = pathsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      const newStats = computeStats(editedDays, paths, holidays)
+      const newStats = computeMonthStats(editedDays, paths, holidays, key)
 
       await setDoc(doc(db, 'schedules', key), {
         ...schedule,
@@ -199,6 +205,7 @@ export default function Dashboard() {
               pathMap={pathMap}
               onEdit={editMode ? handleEdit : undefined}
               unavailableReason={unavailableReason}
+              holidayDates={holidayDates}
             />
           </div>
 
@@ -228,7 +235,7 @@ function BalanceChart({ stats, pathMap }) {
     .filter(([id, p]) => {
       if (p.regime !== 'normal') return false
       const s = stats[id] || {}
-      return (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0) + (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0) > 0
+      return (s.HAC?.weekday || 0) + (s.HOBRA?.weekday || 0) > 0
     })
     .sort((a, b) => a[1].name.localeCompare(b[1].name))
 
@@ -239,8 +246,8 @@ function BalanceChart({ stats, pathMap }) {
     const firstName = p.name.trim().split(' ')[0]
     return {
       name: firstName,
-      'HAC': (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0),
-      'HOBRA': (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0),
+      'HAC': s.HAC?.weekday || 0,
+      'HOBRA': s.HOBRA?.weekday || 0,
     }
   })
 
@@ -250,6 +257,9 @@ function BalanceChart({ stats, pathMap }) {
         <TrendingUp size={20} className="text-blue-600" />
         Balanceamento do Mês
       </h2>
+      <p className="text-xs text-gray-500 -mt-3 mb-4">
+        Não inclui feriados — eles têm contabilidade manual na aba Feriados.
+      </p>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} margin={{ top: 4, right: 16, left: -16, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
