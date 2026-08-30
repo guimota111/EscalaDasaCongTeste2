@@ -40,13 +40,14 @@ export function generateSchedule({
     return true
   }
 
-  // Contadores por hospital, semeados com o histórico (desempate dos FDS)
+  // Contadores por hospital, semeados com o histórico (desempate dos FDS).
+  // Feriados não entram: eles têm contabilidade manual e ficam fora do balanceamento.
   const shiftCount = {} // { pathId: { HAC: n, HOBRA: n } }
   for (const p of active) {
     const s = existingStats?.[p.id] || {}
     shiftCount[p.id] = {
-      HAC: (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0),
-      HOBRA: (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0),
+      HAC: s.HAC?.weekday || 0,
+      HOBRA: s.HOBRA?.weekday || 0,
     }
   }
 
@@ -208,15 +209,66 @@ export function findDoubleBookedDates(scheduleDays = {}) {
   return conflicts
 }
 
+/** Normaliza a lista de plantões manuais de um feriado. */
+export function getHolidayShifts(holiday) {
+  if (!Array.isArray(holiday?.shifts)) return []
+  return holiday.shifts
+    .filter((sh) => sh && sh.pathId && HOSPITALS.includes(sh.hospital))
+    .map((sh) => ({ pathId: sh.pathId, hospital: sh.hospital }))
+}
+
+/** Set com as datas ('YYYY-MM-DD') marcadas como feriado. */
+export function holidayDateSet(holidays = []) {
+  return new Set(
+    (holidays || [])
+      .map((h) => (typeof h?.date === 'string' ? h.date : ''))
+      .filter(Boolean)
+  )
+}
+
 /**
- * Compute statistics from a published schedule.
- * 5th weekend is derived directly from the schedule days (not from weekendAssignments)
- * so manual edits to those cells are always reflected correctly.
+ * Contabilidade MANUAL dos feriados.
+ *
+ * Cada feriado guarda seus próprios plantões (`shifts`), cadastrados na aba
+ * Feriados — um por patologista/hospital. Nada aqui vem da escala.
+ *
+ * `filter` restringe quais feriados entram:
+ *   - string 'YYYY-MM' → só os feriados daquele mês;
+ *   - função (dateStr, holiday) => boolean;
+ *   - ausente → todos.
+ */
+export function computeHolidayStats(holidays = [], filter) {
+  const match = (dateStr, h) => {
+    if (!dateStr) return false
+    if (typeof filter === 'string') return dateStr.slice(0, 7) === filter
+    if (typeof filter === 'function') return !!filter(dateStr, h)
+    return true
+  }
+
+  const stats = {}
+  for (const h of holidays || []) {
+    const dateStr = typeof h?.date === 'string' ? h.date : ''
+    if (!match(dateStr, h)) continue
+    for (const { pathId, hospital } of getHolidayShifts(h)) {
+      if (!stats[pathId]) stats[pathId] = emptyStatEntry()
+      stats[pathId][hospital].holiday++
+    }
+  }
+  return stats
+}
+
+/**
+ * Estatísticas de uma escala publicada.
+ *
+ * Dias marcados como feriado ficam de fora por completo: eles não entram em
+ * nenhum balanceamento (nem Seg-Qui, nem Seg/Qua, nem 5º FDS). A contagem de
+ * feriados é manual e vem de `computeHolidayStats`.
+ *
+ * O 5º final de semana é derivado dos dias da escala (e não de
+ * `weekendAssignments`) para refletir edições manuais nessas células.
  */
 export function computeStats(scheduleDays, pathologists, holidays) {
-  const holidaySet = new Set(
-    holidays.map((h) => (typeof h.date === 'string' ? h.date : ''))
-  )
+  const holidaySet = holidayDateSet(holidays)
 
   const stats = {}
 
@@ -227,6 +279,7 @@ export function computeStats(scheduleDays, pathologists, holidays) {
   // Find which dates belong to the 5th weekend of their month
   const fifthWeekendDates = new Set()
   for (const dateStr of Object.keys(scheduleDays)) {
+    if (holidaySet.has(dateStr)) continue
     const date = new Date(dateStr + 'T12:00:00')
     const slot = getWeekendSlotOfDate(date)
     if (slot === 5) fifthWeekendDates.add(dateStr)
@@ -236,7 +289,9 @@ export function computeStats(scheduleDays, pathologists, holidays) {
   const fifthWeekendCounted = new Set() // `${pathId}-${hospital}`
 
   for (const [dateStr, day] of Object.entries(scheduleDays)) {
-    const isHoliday = holidaySet.has(dateStr)
+    // Feriado: o dia inteiro sai da contabilidade automática.
+    if (holidaySet.has(dateStr)) continue
+
     const dow = new Date(dateStr + 'T12:00:00').getDay()
     const isWeekday = dow >= 1 && dow <= 4
     const isFifthWeekend = fifthWeekendDates.has(dateStr)
@@ -246,9 +301,7 @@ export function computeStats(scheduleDays, pathologists, holidays) {
       if (!pathId) continue
       ensure(pathId)
 
-      if (isHoliday) {
-        stats[pathId][hospital].holiday++
-      } else if (isWeekday) {
+      if (isWeekday) {
         stats[pathId][hospital].weekday++
         // Segmentação Seg-Qui: contar segundas (dow 1) e quartas (dow 3) separadamente
         if (dow === 1) stats[pathId][hospital].mon++
@@ -267,4 +320,21 @@ export function computeStats(scheduleDays, pathologists, holidays) {
   }
 
   return stats
+}
+
+/**
+ * Estatísticas completas de um mês: escala (sem os feriados) + os plantões de
+ * feriado cadastrados manualmente para aquele mês.
+ * `monthKey` é 'YYYY-MM'.
+ */
+export function computeMonthStats(scheduleDays, pathologists, holidays, monthKey) {
+  return mergeStatsMaps(
+    computeStats(scheduleDays, pathologists, holidays),
+    computeHolidayStats(holidays, monthKey)
+  )
+}
+
+/** Soma usada em todo balanceamento — feriados ficam de fora. */
+export function balanceTotal(statEntry, hospitals = HOSPITALS) {
+  return hospitals.reduce((sum, h) => sum + (statEntry?.[h]?.weekday || 0), 0)
 }

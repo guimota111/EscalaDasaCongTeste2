@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as htmlToImage from 'html-to-image'
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
-import { computeStats } from '../utils/scheduleAlgorithm'
+import { computeStats, computeHolidayStats, mergeStatsMaps } from '../utils/scheduleAlgorithm'
 import { MONTH_NAMES } from '../utils/dateHelpers'
 import { X, Copy, Download, Check, AlertTriangle } from 'lucide-react'
 import ReportImage from './ReportImage'
@@ -65,15 +65,42 @@ export default function ReportModal({ mode, onClose }) {
       return true
     }
 
-    const agg = {}
-    const monthAgg = {} // m -> { total, paths: Set }
+    const inPeriod = (y, m) => y === year && (mode !== 'monthly' || m === month)
+
+    // Estatísticas por mês do período: a escala (já sem os dias de feriado)
+    // somada aos plantões de feriado cadastrados manualmente naquele mês.
+    const statsByMonth = {}
     for (const s of schedules) {
       if (!s.days) continue
       const y = s.year ?? Number(String(s.id).slice(0, 4))
       const m = s.month ?? Number(String(s.id).slice(5, 7))
-      if (y !== year) continue
-      if (mode === 'monthly' && m !== month) continue
-      const stats = computeStats(s.days, pathologists, holidays)
+      if (!inPeriod(y, m)) continue
+      const key = String(s.id).slice(0, 7)
+      statsByMonth[key] = mergeStatsMaps(
+        statsByMonth[key] || {},
+        computeStats(s.days, pathologists, holidays)
+      )
+    }
+    // Feriados contam mesmo em meses sem escala publicada.
+    for (const h of holidays) {
+      const dateStr = typeof h?.date === 'string' ? h.date : ''
+      if (!dateStr) continue
+      const [y, m] = dateStr.split('-').map(Number)
+      if (!inPeriod(y, m)) continue
+      const key = dateStr.slice(0, 7)
+      if (!statsByMonth[key]) statsByMonth[key] = {}
+    }
+    for (const key of Object.keys(statsByMonth)) {
+      statsByMonth[key] = mergeStatsMaps(
+        statsByMonth[key],
+        computeHolidayStats(holidays, key)
+      )
+    }
+
+    const agg = {}
+    const monthAgg = {} // m -> { total, paths: Set }
+    for (const [key, stats] of Object.entries(statsByMonth)) {
+      const m = Number(key.slice(5, 7))
       for (const [pid, st] of Object.entries(stats)) {
         if (!includePath(pathById[pid])) continue
         const segQuiHAC = st.HAC?.weekday || 0
@@ -81,7 +108,8 @@ export default function ReportModal({ mode, onClose }) {
         const feriados = (st.HAC?.holiday || 0) + (st.HOBRA?.holiday || 0)
         const mon = (st.HAC?.mon || 0) + (st.HOBRA?.mon || 0)
         const wed = (st.HAC?.wed || 0) + (st.HOBRA?.wed || 0)
-        const total = segQuiHAC + segQuiHOBRA + feriados
+        // Total de balanceamento — feriados ficam de fora.
+        const total = segQuiHAC + segQuiHOBRA
         if (!agg[pid]) agg[pid] = { segQuiHAC: 0, segQuiHOBRA: 0, feriados: 0, mon: 0, wed: 0, total: 0 }
         agg[pid].segQuiHAC += segQuiHAC
         agg[pid].segQuiHOBRA += segQuiHOBRA
@@ -98,7 +126,7 @@ export default function ReportModal({ mode, onClose }) {
     }
 
     const perPath = Object.entries(agg)
-      .filter(([, v]) => v.total > 0)
+      .filter(([, v]) => v.total > 0 || v.feriados > 0)
       .map(([pid, v]) => ({
         id: pid,
         name: pathById[pid]?.name || '—',

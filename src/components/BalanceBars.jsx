@@ -2,7 +2,8 @@ import React from 'react'
 
 /**
  * Horizontal balance bars showing HAC (blue) and HOBRA (green) shifts per pathologist.
- * stats: { [pathId]: { HAC: { weekday, holiday }, HOBRA: { weekday, holiday } } }
+ * Feriados têm contabilidade manual (aba Feriados) e ficam de fora daqui.
+ * stats: { [pathId]: { HAC: { weekday }, HOBRA: { weekday } } }
  * pathMap: { [pathId]: any }
  */
 export default function BalanceBars({ stats = {}, pathMap = {} }) {
@@ -14,7 +15,7 @@ export default function BalanceBars({ stats = {}, pathMap = {} }) {
       if (p.regime !== 'normal') return false
       if (p.active !== false) return true
       const s = stats[id] || {}
-      return (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0) + (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0) > 0
+      return (s.HAC?.weekday || 0) + (s.HOBRA?.weekday || 0) > 0
     })
     .sort((a, b) => a[1].name.localeCompare(b[1].name))
 
@@ -25,8 +26,8 @@ export default function BalanceBars({ stats = {}, pathMap = {} }) {
   // Compute per-person totals
   const rows = paths.map(([id, p]) => {
     const s = stats[id] || {}
-    const hac = (s.HAC?.weekday || 0) + (s.HAC?.holiday || 0)
-    const hobra = (s.HOBRA?.weekday || 0) + (s.HOBRA?.holiday || 0)
+    const hac = s.HAC?.weekday || 0
+    const hobra = s.HOBRA?.weekday || 0
     return { id, name: p.name, hac, hobra, total: hac + hobra }
   })
 

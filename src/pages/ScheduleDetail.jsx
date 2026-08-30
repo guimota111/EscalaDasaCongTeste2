@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
 import { formatMonthYear } from '../utils/dateHelpers'
+import { computeMonthStats, holidayDateSet } from '../utils/scheduleAlgorithm'
 import MonthCalendar from '../components/MonthCalendar'
 import BalanceTable from '../components/BalanceTable'
 import ExportScheduleModal from '../components/ExportScheduleModal'
@@ -13,23 +14,33 @@ export default function ScheduleDetail() {
   const [schedule, setSchedule] = useState(null)
   const [stats, setStats] = useState(null)
   const [pathMap, setPathMap] = useState({})
+  const [holidayDates, setHolidayDates] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [showExport, setShowExport] = useState(false)
 
   useEffect(() => {
     async function load() {
-      const [schedSnap, statsSnap, pathSnap] = await Promise.all([
+      const [schedSnap, pathSnap, holSnap] = await Promise.all([
         getDoc(doc(db, 'schedules', yearMonth)),
-        getDoc(doc(db, 'statistics', yearMonth)),
         getDocs(collection(db, 'pathologists')),
+        getDocs(collection(db, 'holidays')),
       ])
 
+      const paths = pathSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
       const map = {}
-      pathSnap.docs.forEach((d) => (map[d.id] = { id: d.id, ...d.data() }))
+      paths.forEach((p) => (map[p.id] = p))
       setPathMap(map)
 
-      if (schedSnap.exists()) setSchedule(schedSnap.data())
-      if (statsSnap.exists()) setStats(statsSnap.data().shifts)
+      const holidays = holSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      setHolidayDates(holidayDateSet(holidays))
+
+      if (schedSnap.exists()) {
+        const sched = schedSnap.data()
+        setSchedule(sched)
+        // Recalculado na hora: os feriados saem do balanceamento e os plantões
+        // de feriado cadastrados manualmente entram.
+        setStats(computeMonthStats(sched.days || {}, paths, holidays, yearMonth))
+      }
       setLoading(false)
     }
     load()
@@ -75,6 +86,7 @@ export default function ScheduleDetail() {
               month={month}
               scheduleDays={schedule.days || {}}
               pathMap={pathMap}
+              holidayDates={holidayDates}
             />
           </div>
 
@@ -83,6 +95,9 @@ export default function ScheduleDetail() {
               <TrendingUp size={18} className="text-blue-600" />
               Balanceamento
             </h2>
+            <p className="text-xs text-gray-500 -mt-3 mb-4">
+              Dias de feriado ficam fora do total; a coluna Feriados vem do cadastro manual.
+            </p>
             <BalanceTable stats={stats || {}} pathMap={pathMap} />
           </div>
         </div>
